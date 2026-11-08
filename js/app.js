@@ -374,4 +374,5 @@ window.addEventListener('DOMContentLoaded', () => {
   const math = () => { if (window.renderMathInElement) renderMathInElement(document.querySelector('.story'), { delimiters: [{ left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }], throwOnError: false }); renderToy(); };
   if (window.renderMathInElement) math(); else window.addEventListener('load', math);
   compute();
+  window.addEventListener('learnshown', () => setTimeout(render, 0));
 });

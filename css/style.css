@@ -142,3 +142,80 @@ canvas.heat { display: block; width: 100%; max-width: 240px; aspect-ratio: 1; bo
   .bar { padding: 0 20px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+
+/* ───────── 보기 전환 탭 ───────── */
+.bar { gap: 24px; }
+.tabs { display: flex; gap: 2px; padding: 2px; background: var(--raised); border-radius: 8px; margin-right: auto; margin-left: 16px; }
+.tabs button { height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--t2); font: 400 13px var(--sans); cursor: pointer; transition: background-color 140ms var(--ease), color 140ms var(--ease); }
+.tabs button:hover { color: var(--t1); }
+.tabs button[aria-selected="true"] { background: var(--card); color: var(--t1); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
+[hidden] { display: none !important; }
+
+/* ───────── 게임 ───────── */
+.game { max-width: 1560px; margin: 0 auto; padding: 40px 32px 80px; }
+.g-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: end; margin-bottom: 24px; }
+.g-head .lede { max-width: 44rem; }
+.levels { display: flex; gap: 8px; flex-wrap: wrap; }
+.levels button { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px 0 6px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--card); color: var(--t2); font: 400 13px var(--sans); cursor: pointer; transition: background-color 140ms var(--ease), color 140ms var(--ease), border-color 140ms var(--ease); }
+.levels button:hover { color: var(--t1); background: var(--raised); }
+.levels .lvn { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; background: var(--raised); font: 400 12px var(--mono); color: var(--t2); }
+.levels button[aria-pressed="true"] { color: var(--t1); border-color: var(--t1); }
+.levels button[aria-pressed="true"] .lvn { background: var(--t1); color: var(--card); }
+.g-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+.g-board, .g-side > .score, .g-result { background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
+.g-board { padding: 20px 24px 16px; }
+.g-bar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.g-desc { margin: 0; font-size: 14px; color: var(--t1); max-width: 40rem; }
+.g-tools { display: flex; gap: 16px; align-items: center; }
+.g-tools .slider.tight { grid-template-columns: auto 96px 20px; }
+.g-foot { display: flex; justify-content: space-between; font: 400 12px/16px var(--mono); color: var(--t3); padding-top: 4px; }
+.g-free { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 32px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.g-free .select { grid-template-columns: 88px 1fr; }
+.g-side { display: grid; gap: 12px; position: sticky; top: 80px; }
+.score { padding: 20px 24px; }
+.s-label { margin: 0; font-size: 13px; color: var(--t2); }
+.s-big { margin: 4px 0 8px; font: 500 56px/1 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.s-big small { font: 400 14px var(--sans); color: var(--t3); margin-left: 6px; letter-spacing: 0; }
+.stars { display: flex; gap: 4px; margin-bottom: 8px; }
+.star { width: 20px; height: 20px; fill: var(--raised); stroke: var(--line-strong); stroke-width: 0.6; transition: fill 200ms var(--ease); }
+.star.on { fill: var(--ink); stroke: var(--ink); }
+.s-sub { margin: 0 0 16px; font: 400 12px var(--mono); color: var(--t3); }
+.budget { display: grid; grid-template-columns: auto auto; justify-content: space-between; gap: 6px 12px; font-size: 13px; color: var(--t2); }
+.budget #gUsed { font: 400 12px var(--mono); color: var(--t1); }
+.budget .track { grid-column: 1 / -1; height: 4px; background: var(--raised); border-radius: 2px; overflow: hidden; }
+.budget .track i { display: block; height: 100%; width: 0; background: var(--t1); transition: width 200ms var(--ease); }
+.g-msg { margin: 0; min-height: 20px; font-size: 13px; line-height: 20px; color: var(--pencil); }
+.g-actions { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+.btn.primary { background: var(--t1); color: var(--card); border-color: var(--t1); height: 40px; justify-content: center; }
+.btn.primary:hover { background: #38322a; }
+.g-actions .btn { height: 40px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.ghost { background: transparent; justify-content: center; }
+.kc { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 4px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; font: 400 11px var(--mono); color: var(--t2); }
+.g-result { padding: 20px 24px; }
+.gr-verdict { margin: 0 0 16px; font-size: 14px; line-height: 22px; }
+.gr-list { display: grid; gap: 10px; }
+.gr-row { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 12px; font-size: 13px; color: var(--t2); }
+.gr-row.me { color: var(--t1); font-weight: 500; }
+.gr-row .v { font: 400 13px var(--mono); color: var(--t1); font-variant-numeric: tabular-nums; }
+.gr-row .t { grid-column: 1 / -1; height: 4px; background: var(--raised); border-radius: 2px; overflow: hidden; }
+.gr-row .t i { display: block; height: 100%; }
+.gr-note { margin: 16px 0 0; font-size: 12px; line-height: 18px; color: var(--t3); }
+.rules { font-size: 13px; color: var(--t2); padding: 4px 4px; }
+.rules summary { cursor: pointer; color: var(--t1); }
+.rules ul { padding-left: 18px; margin: 8px 0 0; }
+.rules li { margin-bottom: 6px; }
+@media (max-width: 1080px) {
+  .game { padding: 24px 20px 64px; }
+  .g-head, .g-grid { grid-template-columns: 1fr; }
+  .g-side { position: static; }
+  .g-free { grid-template-columns: 1fr; }
+  .tabs { margin-left: 8px; }
+  .mark { font-size: 0; }
+  .bar nav { display: none; }
+}
+
+.seg button, .slider span, .levels button { white-space: nowrap; }
+.g-tools { flex-wrap: wrap; }
+.lvs { font-size: 11px; color: var(--ink); letter-spacing: 1px; }
+.lvs:empty { display: none; }
