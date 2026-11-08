@@ -49,3 +49,25 @@ export function selectModes(beam, ratio = 10) {
   const Phi = Array.from({ length: beam.nNode }, (_, i) => Float64Array.from(sel, (md) => md.w[i]));
   return { Phi, modes: sel, freqRatio: sel.map((md) => Math.sqrt(md.omega2) / w1) };
 }
+
+// 전단 건물 (논문 그림 1): 층마다 질량 1, 층 강성 1 → K 삼중대각, M = I
+export function buildShear(N = 9) {
+  const K = Array.from({ length: N }, () => new Float64Array(N));
+  for (let i = 0; i < N; i++) {
+    K[i][i] = i === N - 1 ? 1 : 2;
+    if (i > 0) { K[i][i - 1] = -1; K[i - 1][i] = -1; }
+  }
+  const { values, vectors } = symEig(K, 1e-14);
+  const order = values.map((_, i) => i).sort((a, b) => values[a] - values[b]);
+  const modes = order.map((idx) => {
+    const w = vectors.map((r) => r[idx]);
+    const sg = w[N - 1] < 0 ? -1 : 1; // 지붕층 양수
+    return { omega2: values[idx], w: w.map((a) => a * sg) };
+  });
+  return { kind: 'building', nNode: N, x: Array.from({ length: N }, (_, i) => i + 1), L: N, le: 1, supports: [], modes };
+}
+export function firstModes(st, m) {
+  const sel = st.modes.slice(0, m), w1 = Math.sqrt(sel[0].omega2);
+  const Phi = Array.from({ length: st.nNode }, (_, i) => Float64Array.from(sel, (md) => md.w[i]));
+  return { Phi, modes: sel, freqRatio: sel.map((md) => Math.sqrt(md.omega2) / w1) };
+}
