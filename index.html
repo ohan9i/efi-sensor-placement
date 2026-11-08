@@ -40,7 +40,7 @@
     </div>
 
     <div class="stage-wrap">
-      <canvas id="scene" aria-label="교량 위 센서 배치 판"></canvas>
+      <canvas id="scene" aria-label="연속보 위 센서 배치 판"></canvas>
       <div class="hud-corner">
         <div class="seg dark" id="gModes" role="radiogroup" aria-label="진동 보기">
           <button data-v="all" aria-pressed="true">전체 진동</button>
@@ -53,7 +53,7 @@
           <button class="ibtn" id="gModeNext" aria-label="다음 모드"><svg viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
         </div>
       </div>
-      <p class="tip" id="gTip">다리 위 소켓을 눌러 센서를 꽂으세요</p>
+      <p class="tip" id="gTip">보 위의 소켓을 눌러 센서를 꽂으세요 · 논문 4장의 4경간 연속보</p>
     </div>
 
     <div class="hud-bottom">
@@ -101,7 +101,7 @@
       <ul>
         <li>센서 = 그 위치의 수직 응답. 모드 형상 Φ의 한 행입니다</li>
         <li>점수 = 배치의 det(ΦᵀΣ⁻¹Φ)를 최고 기록 대비 100점으로 환산</li>
-        <li>지점(교각) 위는 진동이 0이라 정보가 없습니다</li>
+        <li>지점(핀·롤러) 위는 진동이 0이라 정보가 없습니다</li>
         <li>오차가 상관되면 붙어 있는 센서끼리 정보가 겹칩니다</li>
         <li>별 1개 70점, 2개 90점, 3개는 EfI 봇 이상</li>
       </ul>

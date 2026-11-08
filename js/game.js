@@ -1,4 +1,4 @@
-// 게임: 진동하는 교량 위에 센서를 꽂고 EfI 봇과 정보량(det F)으로 대결
+// 게임: 진동하는 연속보(논문 4장) 위에 센서를 꽂고 EfI 봇과 정보량(det F)으로 대결
 import { invSPD, logdetSPD, matmul, transpose, rowsOf, sub } from './linalg.js';
 import { efiProposed, buildSigma, sequentialDeletion, activeAt, argminTol } from './efi.js';
 import { buildBeam, selectModes } from './beam.js';
@@ -206,7 +206,7 @@ function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.a
 function draw(now) {
   if (!G.beam || !W) return;
   const t = now / 1000, d = disp(t), xs = G.beam.x, n = xs.length;
-  const y0 = deckY(), A = amp(), ground = H * 0.72;
+  const y0 = deckY(), A = amp(), ground = Math.min(H * 0.72, y0 + A + 48);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
@@ -218,13 +218,23 @@ function draw(now) {
   ctx.fillStyle = COL.t3; ctx.font = '11px "IBM Plex Mono", monospace'; ctx.textAlign = 'center';
   for (let x = 0; x <= G.beam.L + 1e-9; x += 4) ctx.fillText(x, X(x), ground + 26);
 
-  // 교각
-  G.beam.supports.forEach((s) => {
-    const px = X(xs[s]);
-    ctx.fillStyle = '#161a24'; ctx.fillRect(px - 8, y0 + 10, 16, ground - y0 - 10);
-    ctx.strokeStyle = COL.line2; ctx.strokeRect(px - 8.5, y0 + 9.5, 17, ground - y0 - 9.5);
-    ctx.fillStyle = COL.t3; ctx.beginPath(); ctx.moveTo(px, y0 + 5); ctx.lineTo(px - 9, y0 + 13); ctx.lineTo(px + 9, y0 + 13); ctx.closePath(); ctx.fill();
+  // 지점: 논문 그림 2처럼 핀 1개 + 롤러 4개
+  G.beam.supports.forEach((s, q) => {
+    const px = X(xs[s]), top = y0 + 6;
+    ctx.strokeStyle = COL.t2; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px - 9, top + 14); ctx.lineTo(px + 9, top + 14); ctx.closePath(); ctx.stroke();
+    if (q === 0) {
+      ctx.beginPath(); ctx.moveTo(px - 13, top + 14); ctx.lineTo(px + 13, top + 14); ctx.stroke();
+      ctx.strokeStyle = COL.t3; ctx.lineWidth = 1;
+      for (let k = -12; k < 12; k += 4) { ctx.beginPath(); ctx.moveTo(px + k + 4, top + 15); ctx.lineTo(px + k, top + 20); ctx.stroke(); }
+    } else {
+      [-5, 5].forEach((o) => { ctx.beginPath(); ctx.arc(px + o, top + 17.5, 3, 0, 2 * Math.PI); ctx.stroke(); });
+      ctx.beginPath(); ctx.moveTo(px - 13, top + 21); ctx.lineTo(px + 13, top + 21); ctx.stroke();
+    }
   });
+  ctx.fillStyle = COL.t3; ctx.font = '11px "IBM Plex Sans KR", sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('핀', X(xs[G.beam.supports[0]]), y0 + 40);
+  ctx.fillText('롤러', X(xs[G.beam.supports[1]]), y0 + 40);
 
   if (G.view === 'one') {
     const w = G.modes[G.modeIdx].w, nm = G.norm[G.modeIdx];
