@@ -11,13 +11,9 @@ const COL = {
 };
 
 export const LEVELS = [
-  { id: 1, name: '워밍업', desc: '오차가 서로 독립(Σ = I)입니다. 센서 14개로 모드 10개를 구분해 보세요', spans: '8,12,12,8', model: 'identity', lambda: 4, K: 14 },
-  { id: 2, name: '닮은 오차', desc: '가까운 센서끼리 오차가 닮았습니다(Eq. 29, λ = 4). 붙여 꽂으면 정보가 겹쳐요', spans: '8,12,12,8', model: 'eq29', lambda: 4, K: 12 },
-  { id: 3, name: '빠듯한 예산', desc: '모드 10개를 센서 10개로. 한 개만 어긋나도 정보가 무너집니다', spans: '8,12,12,8', model: 'eq29', lambda: 4, K: 10 },
-  { id: 4, name: '긴 상관', desc: '상관 길이 λ = 8. 센서를 훨씬 넓게 퍼뜨려야 합니다', spans: '8,12,12,8', model: 'eq28', lambda: 8, K: 12 },
-  { id: 5, name: '9층 건물', desc: '논문 그림 1의 예시입니다. 9개 층 중 3개 층에만 센서를 달아 1–3차 모드를 구분하세요', spans: 'b9:3', model: 'identity', lambda: 3, K: 3 },
-  { id: 6, name: '20층 건물', desc: '20층에서 4개 모드를 센서 6개로. 이웃 층끼리 오차가 닮았습니다(Eq. 28, λ = 3층)', spans: 'b20:4', model: 'eq28', lambda: 3, K: 6 },
-  { id: 7, name: '자유 실험', desc: '구조, 오차 모델, 상관 길이, 센서 수를 직접 바꿔 보세요', spans: '8,12,12,8', model: 'eq29', lambda: 4, K: 12, free: true },
+  { id: 1, name: '9층 건물', desc: '논문 그림 1의 예시입니다. 9개 층 중 3개 층에만 센서를 달아 1–3차 모드를 구분하세요', spans: 'b9:3', model: 'identity', lambda: 3, K: 3 },
+  { id: 2, name: '20층 건물', desc: '20층에서 4개 모드를 센서 6개로. 이웃 층끼리 오차가 닮았습니다(Eq. 28, λ = 3층)', spans: 'b20:4', model: 'eq28', lambda: 3, K: 6 },
+  { id: 3, name: '30층 건물', desc: '30층에서 5개 모드를 센서 8개로. 오차 상관이 더 넓습니다(Eq. 28, λ = 4층)', spans: 'b30:5', model: 'eq28', lambda: 4, K: 8 },
 ];
 const SPAN_PRESETS = [
   { v: '8,12,12,8', name: '4경간 8–12–12–8 (논문)' },
@@ -444,7 +440,7 @@ function renderDuel() {
 }
 
 // ─────────── 단계, 저장 ───────────
-const STORE = 'efi-game-stars';
+const STORE = 'efi-game-stars-building';
 const loadStars = () => { try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch { return {}; } };
 function saveStars(id, st) {
   const all = loadStars(); if ((all[id] || 0) >= st) return;
@@ -461,10 +457,10 @@ function paintLevels() {
 }
 function setLevel(lv) {
   G.level = lv; Object.assign(G, { spans: lv.spans, model: lv.model, lambda: lv.lambda, K: lv.K });
-  $('gStep').textContent = lv.free ? '자유 실험' : `스테이지 ${lv.id} / ${LEVELS.length - 1}`;
+  $('gStep').textContent = `스테이지 ${lv.id} / ${LEVELS.length}`;
   $('gTitle').textContent = lv.name; $('gDesc').textContent = lv.desc;
   $('gFree').hidden = !lv.free; syncFree(); paintLevels(); setup();
-  $('gNext').hidden = lv.free;
+  $('gNext').hidden = lv.id === LEVELS.length;
 }
 function syncFree() {
   $('fSpans').value = G.spans; $('fModel').value = G.model; $('fLambda').value = G.lambda; $('fLambdaOut').textContent = (+G.lambda).toFixed(1);

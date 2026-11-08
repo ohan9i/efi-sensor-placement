@@ -32,7 +32,7 @@
   <section class="arena">
     <div class="hud-top">
       <div class="mission">
-        <p class="m-step" id="gStep">스테이지 1 / 4</p>
+        <p class="m-step" id="gStep">스테이지 1 / 3</p>
         <h1 id="gTitle">워밍업</h1>
         <p class="m-desc" id="gDesc"></p>
       </div>
@@ -99,9 +99,9 @@
     <details class="rules" open>
       <summary>규칙</summary>
       <ul>
-        <li>센서 = 그 위치의 수직 응답. 모드 형상 Φ의 한 행입니다</li>
+        <li>센서 = 그 층의 수평 응답. 모드 형상 Φ의 한 행입니다</li>
         <li>점수 = 배치의 det(ΦᵀΣ⁻¹Φ)를 최고 기록 대비 100점으로 환산</li>
-        <li>보의 지점(핀·롤러) 위는 진동이 0이라 정보가 없습니다. 건물은 위층일수록 흔들림이 큽니다</li>
+        <li>건물은 위층일수록 흔들림이 크지만, 높은 차수 모드는 중간층에서 0이 되는 곳이 생깁니다</li>
         <li>오차가 상관되면 붙어 있는 센서끼리 정보가 겹칩니다</li>
         <li>별 1개 70점, 2개 90점, 3개는 EfI 봇 이상</li>
       </ul>
