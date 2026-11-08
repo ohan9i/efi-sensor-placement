@@ -1,25 +1,21 @@
-// 게임: 직접 센서를 배치하고 EfI 봇과 정보량(det F)으로 겨루기
+// 게임: 진동하는 교량 위에 센서를 꽂고 EfI 봇과 정보량(det F)으로 대결
 import { invSPD, logdetSPD, matmul, transpose, rowsOf, sub } from './linalg.js';
 import { efiProposed, buildSigma, sequentialDeletion, activeAt, argminTol } from './efi.js';
 import { buildBeam, selectModes } from './beam.js';
 
 const $ = (id) => document.getElementById(id);
-const NS = 'http://www.w3.org/2000/svg';
-const C = { t1: '#1f1b16', t2: '#5e554a', t3: '#7b7266', line: 'rgba(31,27,22,0.1)', strong: 'rgba(31,27,22,0.28)', ink: '#2747a8', pencil: '#b83a2b', ochre: '#a0782c', grey: '#9a9286', raised: '#efe9df', card: '#fdfbf7', good: '#2f7a4f' };
-function el(tag, attrs = {}, parent, text) {
-  const e = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, v);
-  if (text != null) e.textContent = text;
-  if (parent) parent.appendChild(e);
-  return e;
-}
+const COL = {
+  bg: '#0b0d14', panel: '#11141c', raised: '#1a1e28', t1: '#eef0f5', t2: '#a3a9b8', t3: '#7a8296',
+  line: 'rgba(238,240,245,0.08)', line2: 'rgba(238,240,245,0.16)',
+  me: '#f5a524', bot: '#6c9bff', apx: '#d07a55', best: '#4cc38a', bad: '#e5484d',
+};
 
 export const LEVELS = [
-  { id: 1, name: '워밍업', desc: '오차가 서로 독립(Σ = I)인 쉬운 판입니다. 센서 14개로 모드 10개를 구분해 보세요', spans: '8,12,12,8', model: 'identity', lambda: 4, K: 14 },
-  { id: 2, name: '닮은 오차', desc: '가까운 센서끼리 오차가 상관됩니다(Eq. 29, λ = 4). 붙여 놓으면 정보가 겹쳐요', spans: '8,12,12,8', model: 'eq29', lambda: 4, K: 12 },
-  { id: 3, name: '빠듯한 예산', desc: '모드 10개를 센서 10개로. 하나라도 어긋나면 F가 거의 특이해집니다', spans: '8,12,12,8', model: 'eq29', lambda: 4, K: 10 },
-  { id: 4, name: '긴 상관', desc: '상관 길이를 λ = 8로 늘렸습니다. 센서를 더 넓게 퍼뜨려야 해요', spans: '8,12,12,8', model: 'eq28', lambda: 8, K: 12 },
-  { id: 5, name: '자유 실험', desc: '구조, 공분산, 예산을 직접 바꿔 가며 실험하세요', spans: '8,12,12,8', model: 'eq29', lambda: 4, K: 12, free: true },
+  { id: 1, name: '워밍업', desc: '오차가 서로 독립(Σ = I)입니다. 센서 14개로 모드 10개를 구분해 보세요', spans: '8,12,12,8', model: 'identity', lambda: 4, K: 14 },
+  { id: 2, name: '닮은 오차', desc: '가까운 센서끼리 오차가 닮았습니다(Eq. 29, λ = 4). 붙여 꽂으면 정보가 겹쳐요', spans: '8,12,12,8', model: 'eq29', lambda: 4, K: 12 },
+  { id: 3, name: '빠듯한 예산', desc: '모드 10개를 센서 10개로. 한 개만 어긋나도 정보가 무너집니다', spans: '8,12,12,8', model: 'eq29', lambda: 4, K: 10 },
+  { id: 4, name: '긴 상관', desc: '상관 길이 λ = 8. 센서를 훨씬 넓게 퍼뜨려야 합니다', spans: '8,12,12,8', model: 'eq28', lambda: 8, K: 12 },
+  { id: 5, name: '자유 실험', desc: '구조, 오차 모델, 상관 길이, 센서 수를 직접 바꿔 보세요', spans: '8,12,12,8', model: 'eq29', lambda: 4, K: 12, free: true },
 ];
 const SPAN_PRESETS = [
   { v: '8,12,12,8', name: '4경간 8–12–12–8 (논문)' },
@@ -32,10 +28,12 @@ const SPAN_PRESETS = [
 const G = {
   level: LEVELS[0], spans: '8,12,12,8', model: 'identity', lambda: 4, K: 14,
   beam: null, Phi: null, m: 10, Sigma: null, placed: new Set(), hints: 3, hint: null,
-  revealed: false, bots: null, showModes: 'all', modeIdx: 0, hover: null, flash: '',
+  revealed: false, bots: null, view: 'all', modeIdx: 0, hover: -1, flash: '',
+  efi: null, weakest: -1, score: 0, shown: 0, lastScore: null, pulse: new Map(), cur: [],
 };
 const beamCache = {};
 
+// ─────────── 계산 ───────────
 function logdetOf(set) {
   if (set.length < G.m) return -Infinity;
   const idx = [...set].sort((a, b) => a - b);
@@ -43,8 +41,11 @@ function logdetOf(set) {
   return logdetSPD(matmul(transpose(S), matmul(W, S)));
 }
 const effOf = (ld, ref) => (ld === -Infinity ? 0 : Math.exp((ld - ref) / G.m) * 100);
-
-// 교환 탐색으로 "알려진 최고 기록" 찾기
+function proxyScore(set) {
+  const S = rowsOf(G.Phi, set), A = matmul(S, transpose(S));
+  for (let i = 0; i < A.length; i++) A[i][i] += 1e-9;
+  return logdetSPD(A);
+}
 function localSearch(start) {
   let cur = [...start], best = logdetOf(cur);
   const n = G.beam.nNode;
@@ -55,8 +56,8 @@ function localSearch(start) {
       let bestB = -1, bestV = best;
       for (let b = 0; b < n; b++) {
         if (inSet.has(b)) continue;
-        const trial = cur.slice(); trial[a] = b;
-        const v = logdetOf(trial);
+        const t = cur.slice(); t[a] = b;
+        const v = logdetOf(t);
         if (v > bestV + 1e-10) { bestV = v; bestB = b; }
       }
       if (bestB >= 0) { cur[a] = bestB; best = bestV; improved = true; }
@@ -73,56 +74,45 @@ function setup() {
   }
   const c = beamCache[G.spans];
   G.beam = c.beam; G.Phi = c.Phi; G.m = c.Phi[0].length; G.modes = c.modes; G.freq = c.freqRatio;
+  G.norm = G.modes.map((md) => Math.max(...md.w.map(Math.abs)) || 1);
+  G.phase = G.modes.map((_, k) => (k * 2.399) % (2 * Math.PI));
   G.Sigma = buildSigma(G.beam.x, G.Phi, { lambda: G.lambda, model: G.model });
   G.K = Math.max(G.m, Math.min(G.K, G.beam.nNode));
-  G.placed = new Set(); G.hints = 3; G.hint = null; G.revealed = false; G.flash = ''; G.modeIdx = Math.min(G.modeIdx, G.m - 1);
-  G.bots = null;
-  $('gModeIdx').max = G.m;
-  $('gStatus').textContent = '상대 계산 중';
+  G.placed = new Set(); G.hints = 3; G.hint = null; G.revealed = false; G.flash = '';
+  G.modeIdx = Math.min(G.modeIdx, G.m - 1); G.bots = null; G.lastScore = null; G.pulse.clear();
+  $('gResult').hidden = true;
+  setView(G.view);
   setTimeout(() => {
     const r2 = sequentialDeletion(G.Phi, G.Sigma, 'alt2', G.K), r4 = sequentialDeletion(G.Phi, G.Sigma, 'alt4', G.K);
     const efi = activeAt(r2, G.K), apx = activeAt(r4, G.K);
     const ls1 = localSearch(efi), ls2 = localSearch(apx);
-    const best = ls1.ld >= ls2.ld ? ls1 : ls2;
-    G.bots = { efi: { set: efi, ld: logdetOf(efi) }, apx: { set: apx, ld: logdetOf(apx) }, best };
-    $('gStatus').textContent = '';
-    render();
+    G.bots = { efi: { set: efi, ld: logdetOf(efi) }, apx: { set: apx, ld: logdetOf(apx) }, best: ls1.ld >= ls2.ld ? ls1 : ls2 };
+    update();
   }, 30);
-  render();
-}
-
-function stars(eff, botEff) {
-  if (eff <= 0) return 0;
-  if (eff >= botEff - 1e-6) return 3;
-  if (eff >= 90) return 2;
-  if (eff >= 70) return 1;
-  return 0;
+  update();
 }
 
 function toggle(i) {
   if (G.placed.has(i)) G.placed.delete(i);
-  else if (G.placed.size >= G.K) { G.flash = `예산은 ${G.K}개입니다. 먼저 센서 하나를 빼세요`; render(); return; }
-  else G.placed.add(i);
-  G.flash = ''; G.hint = null; render();
+  else if (G.placed.size >= G.K) { G.flash = `센서는 ${G.K}개가 전부입니다. 꽂힌 센서를 눌러 먼저 빼세요`; update(); return; }
+  else { G.placed.add(i); G.pulse.set(i, performance.now()); }
+  G.flash = ''; G.hint = null; update();
 }
 
 function useHint() {
-  if (G.hints <= 0) return;
+  if (G.hints <= 0 || !G.bots) return;
   const cur = [...G.placed], n = G.beam.nNode;
-  let hint = null;
+  let hint;
   if (cur.length < G.K) {
-    // 더했을 때 det F를 가장 키우는 자리 (센서가 모드 수보다 적으면 랭크를 가장 키우는 자리)
     let bestV = -Infinity, bestB = -1;
     for (let b = 0; b < n; b++) {
       if (G.placed.has(b)) continue;
-      const trial = cur.concat(b);
-      const v = trial.length >= G.m ? logdetOf(trial) : proxyScore(trial);
+      const t = cur.concat(b), v = t.length >= G.m ? logdetOf(t) : proxyScore(t);
       if (v > bestV) { bestV = v; bestB = b; }
     }
     hint = { add: bestB };
   } else {
-    const base = logdetOf(cur);
-    let bestV = base, swap = null;
+    let bestV = logdetOf(cur), swap = null;
     for (let a = 0; a < cur.length; a++) for (let b = 0; b < n; b++) {
       if (G.placed.has(b)) continue;
       const t = cur.slice(); t[a] = b;
@@ -131,168 +121,259 @@ function useHint() {
     }
     hint = swap || { none: true };
   }
-  G.hints -= 1; G.hint = hint; render();
-}
-// 센서가 모드 수보다 적을 때: Φ_A Φ_Aᵀ 의 행렬식 (작은 정칙화) 으로 근사
-function proxyScore(set) {
-  const S = rowsOf(G.Phi, set), A = matmul(S, transpose(S));
-  for (let i = 0; i < A.length; i++) A[i][i] += 1e-9;
-  return logdetSPD(A);
+  G.hints -= 1; G.hint = hint; update();
 }
 
-// ─────────── 그리기 ───────────
-function drawBoard() {
-  const svg = $('board');
-  while (svg.firstChild) svg.removeChild(svg.firstChild);
-  const W = svg.getBoundingClientRect().width || 1000;
-  const rows = G.revealed && G.bots ? 3 : 0;
-  const yB = 230, H = yB + 64 + rows * 40;
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('height', H);
-  const L = G.beam.L, padL = 24, padR = 24, X = (x) => padL + (x / L) * (W - padL - padR);
-  const xs = G.beam.x;
+const starsFor = (eff, botEff) => (eff <= 0 ? 0 : eff >= botEff - 1e-6 ? 3 : eff >= 90 ? 2 : eff >= 70 ? 1 : 0);
 
-  // 모드 형상 (배경)
-  const modeY = 110, amp = 70;
-  const drawMode = (w, op, sw) => {
-    const mx = Math.max(...w.map(Math.abs)) || 1;
-    el('polyline', { points: xs.map((x, i) => `${X(x)},${modeY - (w[i] / mx) * amp}`).join(' '), fill: 'none', stroke: C.ink, 'stroke-opacity': op, 'stroke-width': sw }, svg);
-  };
-  el('line', { x1: X(0), y1: modeY, x2: X(L), y2: modeY, stroke: C.line }, svg);
-  if (G.showModes === 'all') G.modes.forEach((md) => drawMode(md.w, 0.16, 1.2));
-  else if (G.showModes === 'one') drawMode(G.modes[G.modeIdx].w, 0.8, 2);
-
-  // 센서별 EfI 막대 (내 배치)
-  const cur = [...G.placed].sort((a, b) => a - b);
-  let efi = null, weakest = -1;
-  if (cur.length > G.m) {
-    efi = efiProposed(rowsOf(G.Phi, cur), sub(G.Sigma, cur));
-    weakest = cur[argminTol(efi)];
-  }
-  if (efi) cur.forEach((i, j) => {
-    const h = efi[j] * 52;
-    el('rect', { x: X(xs[i]) - 2.5, y: yB - 14 - h, width: 5, height: Math.max(1, h), fill: i === weakest ? C.pencil : C.ink, opacity: i === weakest ? 0.9 : 0.35 }, svg);
-  });
-
-  // 보와 지점
-  el('line', { x1: X(0), y1: yB, x2: X(L), y2: yB, stroke: C.t1, 'stroke-width': 1.5 }, svg);
-  G.beam.supports.forEach((n, q) => {
-    const x = X(xs[n]);
-    el('path', { d: `M${x},${yB} l-7,12 h14 z`, fill: 'none', stroke: C.t2 }, svg);
-    el('line', { x1: x - 9, y1: yB + 15, x2: x + 9, y2: yB + 15, stroke: C.t3, 'stroke-width': 0.8 }, svg);
-  });
-  // 치수
-  const yd = yB + 40, sx = G.beam.supports.map((n) => xs[n]);
-  el('line', { x1: X(0), y1: yd, x2: X(L), y2: yd, stroke: C.t3, 'stroke-width': 0.8 }, svg);
-  sx.forEach((x) => { el('line', { x1: X(x), y1: yd - 5, x2: X(x), y2: yd + 5, stroke: C.t3, 'stroke-width': 0.8 }, svg); el('line', { x1: X(x) - 4, y1: yd + 4, x2: X(x) + 4, y2: yd - 4, stroke: C.t3, 'stroke-width': 0.8 }, svg); });
-  for (let i = 0; i < sx.length - 1; i++) el('text', { x: (X(sx[i]) + X(sx[i + 1])) / 2, y: yd - 6, 'text-anchor': 'middle' }, svg, (sx[i + 1] - sx[i]).toFixed(1));
-
-  // 슬롯
-  const slotW = Math.max(6, Math.min(10, (W - padL - padR) / xs.length - 2));
-  xs.forEach((x, i) => {
-    const on = G.placed.has(i), cx = X(x);
-    const isHint = G.hint && (G.hint.add === i || G.hint.remove === i);
-    if (isHint) el('circle', { cx, cy: yB - 6, r: 11, fill: 'none', stroke: G.hint.remove === i ? C.pencil : C.ink, 'stroke-width': 1.5, 'stroke-dasharray': '3 2' }, svg);
-    el('rect', { x: cx - slotW / 2, y: yB - slotW - 2, width: slotW, height: slotW, rx: 1.5, fill: on ? C.t1 : C.card, stroke: on ? C.t1 : G.hover === i ? C.ink : C.strong, 'stroke-width': 1 }, svg);
-    const hit = el('rect', { x: cx - 6, y: yB - 70, width: 12, height: 84, fill: 'transparent', style: 'cursor:pointer' }, svg);
-    hit.addEventListener('click', () => toggle(i));
-    hit.addEventListener('mouseenter', () => { G.hover = i; $('gHover').textContent = `x = ${x.toFixed(1)}${on && efi ? ` · EfI ${efi[cur.indexOf(i)].toFixed(3)}` : ''}`; });
-  });
-  if (weakest >= 0) el('text', { x: X(xs[weakest]), y: yB - 74, 'text-anchor': xs[weakest] > L * 0.85 ? 'end' : xs[weakest] < L * 0.15 ? 'start' : 'middle', class: 'lab', style: `fill:${C.pencil}` }, svg, '가장 약한 센서');
-
-  // 공개: 상대 배치
-  if (rows) {
-    const bots = [['EfI 봇 (정확식)', G.bots.efi.set, C.ink], ['근사 봇 (촐레스키)', G.bots.apx.set, C.ochre], ['탐색 최고 기록', G.bots.best.set, C.good]];
-    bots.forEach(([name, set, col], r) => {
-      const y = yB + 80 + r * 40;
-      el('text', { x: X(0), y: y - 10, class: 'lab' }, svg, name);
-      el('line', { x1: X(0), y1: y, x2: X(L), y2: y, stroke: C.strong }, svg);
-      set.forEach((i) => el('rect', { x: X(xs[i]) - 3.5, y: y - 8, width: 7, height: 7, fill: col, opacity: G.placed.has(i) ? 1 : 0.85 }, svg));
-      set.forEach((i) => { if (G.placed.has(i)) el('rect', { x: X(xs[i]) - 5, y: y - 9.5, width: 10, height: 10, fill: 'none', stroke: C.t1, 'stroke-width': 0.8 }, svg); });
-    });
-  }
-}
-
-function render() {
+// ─────────── 상태 → HUD ───────────
+function update() {
   if (!G.beam) return;
-  const cur = [...G.placed];
-  const ld = logdetOf(cur);
-  const ref = G.bots ? G.bots.best.ld : null;
-  const eff = ref != null ? effOf(ld, ref) : null;
-  const botEff = G.bots ? effOf(G.bots.efi.ld, ref) : null;
-  $('gUsed').textContent = `${cur.length} / ${G.K}`;
-  $('gUsedBar').style.width = `${(cur.length / G.K) * 100}%`;
-  $('gScore').textContent = eff == null ? '…' : cur.length < G.m ? '0.0' : eff.toFixed(1);
-  $('gEntropy').textContent = ld === -Infinity ? `센서 ${G.m - cur.length}개 더 필요` : `−ln det F  ${(-ld).toFixed(2)}`;
-  const st = eff != null && cur.length === G.K ? stars(eff, botEff) : 0;
-  if (G.revealed && !G.level.free) saveStars(G.level.id, st);
+  const cur = [...G.placed].sort((a, b) => a - b);
+  G.efi = null; G.weakest = -1;
+  if (cur.length > G.m) { G.efi = efiProposed(rowsOf(G.Phi, cur), sub(G.Sigma, cur)); G.weakest = cur[argminTol(G.efi)]; }
+  G.cur = cur;
+  const ld = logdetOf(cur), ref = G.bots ? G.bots.best.ld : null;
+  const eff = ref == null ? 0 : effOf(ld, ref);
+  const botEff = G.bots ? effOf(G.bots.efi.ld, ref) : 100;
+  if (G.lastScore != null && Math.abs(eff - G.lastScore) > 0.05 && cur.length >= G.m) {
+    const d = eff - G.lastScore, el = $('gDelta');
+    el.textContent = (d > 0 ? '+' : '') + d.toFixed(1);
+    el.className = 'g-delta ' + (d > 0 ? 'up' : 'down');
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+  }
+  G.lastScore = ref == null ? null : eff;
+  G.score = eff;
+
+  const circ = 2 * Math.PI * 84;
+  $('gArc').style.strokeDasharray = `${(Math.min(100, eff) / 100) * circ} ${circ}`;
+  $('gBotTick').style.strokeDasharray = G.bots ? `3 ${circ}` : `0 ${circ}`;
+  $('gBotTick').style.strokeDashoffset = G.bots ? `${-(Math.min(100, botEff) / 100) * circ + 1.5}` : '0';
+  const st = cur.length === G.K && G.bots ? starsFor(eff, botEff) : 0;
   $('gStars').innerHTML = [0, 1, 2].map((i) => `<svg viewBox="0 0 16 16" class="star ${i < st ? 'on' : ''}"><path d="M8 1.5l1.9 4.1 4.4.5-3.3 3 .9 4.4L8 11.3 4.1 13.5l.9-4.4-3.3-3 4.4-.5z"/></svg>`).join('');
-  $('gHint').disabled = G.hints <= 0 || !G.bots;
-  $('gHintN').textContent = G.hints;
+  $('gEntropy').textContent = ld === -Infinity ? '—' : (-ld).toFixed(2);
+  $('gWeak').textContent = G.weakest >= 0 ? `x = ${G.beam.x[G.weakest].toFixed(1)}` : '—';
+  $('gModesN').textContent = G.m;
+  $('gBotMark').textContent = G.bots ? botEff.toFixed(1) : '…';
+
+  $('gPips').innerHTML = Array.from({ length: G.K }, (_, i) => `<i class="${i < G.K - cur.length ? 'on' : ''}"></i>`).join('') + `<span>${G.K - cur.length}</span>`;
+  $('gHint').disabled = G.hints <= 0 || !G.bots; $('gHintN').textContent = G.hints;
   $('gSubmit').disabled = !G.bots || cur.length !== G.K;
-  $('gSubmit').textContent = G.revealed ? '결과 다시 보기' : '제출하고 대결';
   let msg = G.flash;
-  if (!msg && G.hint) msg = G.hint.none ? '지금 배치에서는 한 개만 바꿔서 나아질 곳이 없습니다' : G.hint.remove != null ? `x = ${G.beam.x[G.hint.remove].toFixed(1)}을 빼고 x = ${G.beam.x[G.hint.add].toFixed(1)}에 두면 좋아집니다` : `x = ${G.beam.x[G.hint.add].toFixed(1)}에 두면 정보가 가장 많이 늘어납니다`;
-  if (!msg && cur.length < G.m) msg = `모드 ${G.m}개를 구분하려면 센서가 최소 ${G.m}개 필요합니다`;
+  if (!msg && G.hint) msg = G.hint.none ? '한 개만 바꿔서 나아질 곳이 없습니다. 거의 최적이에요' : G.hint.remove != null ? `x = ${G.beam.x[G.hint.remove].toFixed(1)} 센서를 x = ${G.beam.x[G.hint.add].toFixed(1)}로 옮겨 보세요` : `x = ${G.beam.x[G.hint.add].toFixed(1)}에 꽂으면 정보가 가장 많이 늘어납니다`;
+  if (!msg && !G.bots) msg = '상대 봇이 배치를 계산하는 중';
+  else if (!msg && cur.length < G.m) msg = `모드 ${G.m}개를 구분하려면 센서가 최소 ${G.m}개 필요합니다`;
+  else if (!msg && cur.length === G.K) msg = '센서를 다 꽂았습니다. 대결을 시작하거나 위치를 다듬으세요';
   $('gMsg').textContent = msg || '';
-  $('gCopy').hidden = !G.revealed;
-  drawBoard();
-  renderResult(eff, ld);
+  if (G.revealed) renderDuel();
 }
 
-function renderResult(eff, ld) {
-  const box = $('gResult');
-  if (!G.revealed || !G.bots) { box.hidden = true; return; }
-  box.hidden = false;
-  const ref = G.bots.best.ld;
-  const rows = [
-    ['나', eff, C.t1],
-    ['EfI 봇 · 정확식 Eq.(26)', effOf(G.bots.efi.ld, ref), C.ink],
-    ['근사 봇 · 촐레스키 Eq.(18)', effOf(G.bots.apx.ld, ref), C.ochre],
-    ['탐색 최고 기록', 100, C.good],
-  ].sort((a, b) => b[1] - a[1]);
-  const meE = eff, botE = effOf(G.bots.efi.ld, ref);
-  const verdict = meE >= botE - 1e-6
-    ? (meE > botE + 0.05 ? 'EfI 봇을 이겼습니다. 순차 제거는 탐욕적이라 전역 최적을 보장하지 않거든요' : 'EfI 봇과 같은 수준입니다')
-    : meE >= 90 ? `EfI 봇보다 ${(botE - meE).toFixed(1)}점 낮습니다. 빨간 막대(가장 약한 센서)를 옮겨 보세요` : '정보가 겹치는 센서가 많습니다. 모드 형상이 크게 움직이는 곳에 고르게 퍼뜨려 보세요';
-  box.innerHTML = `<p class="gr-verdict">${verdict}</p><div class="gr-list">${rows.map(([n, v, c]) => `
-    <div class="gr-row${n === '나' ? ' me' : ''}"><span>${n}</span><span class="v">${v.toFixed(1)}</span><span class="t"><i style="width:${Math.max(0, Math.min(100, v))}%;background:${c}"></i></span></div>`).join('')}</div>
-    <p class="gr-note">점수는 탐색으로 찾은 최고 배치 대비 정보 효율, 즉 (det F / det F<sub>best</sub>)<sup>1/${G.m}</sup> × 100 입니다. 아래 도면의 테두리 친 칸은 내 배치와 겹치는 위치입니다.</p>`;
+function tickScore() {
+  const target = G.score;
+  G.shown += (target - G.shown) * 0.18;
+  if (Math.abs(target - G.shown) < 0.05) G.shown = target;
+  $('gScore').textContent = G.shown.toFixed(1);
 }
 
+// ─────────── 장면 (캔버스) ───────────
+let cv, ctx, W = 0, H = 0, dpr = 1;
+const deckY = () => H * 0.44;
+const amp = () => Math.min(56, H * 0.14);
+const padX = () => Math.max(32, W * 0.04);
+const X = (x) => padX() + (x / G.beam.L) * (W - 2 * padX());
+
+function resize() {
+  const r = cv.getBoundingClientRect();
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = r.width; H = r.height;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+}
+
+function disp(t) {
+  const n = G.beam.nNode, out = new Float64Array(n);
+  if (G.view === 'still') return out;
+  const ks = G.view === 'one' ? [G.modeIdx] : G.modes.map((_, k) => k);
+  for (const k of ks) {
+    const w = G.modes[k].w, a = (G.view === 'one' ? 1 : 0.62 / Math.sqrt(k + 1)) / G.norm[k];
+    const s = Math.sin(2 * Math.PI * 0.35 * Math.sqrt(G.freq[k]) * t + G.phase[k]);
+    for (let i = 0; i < n; i++) out[i] += a * w[i] * s;
+  }
+  return out;
+}
+
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+function draw(now) {
+  if (!G.beam || !W) return;
+  const t = now / 1000, d = disp(t), xs = G.beam.x, n = xs.length;
+  const y0 = deckY(), A = amp(), ground = H * 0.72;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  // 바닥, 거리 눈금
+  ctx.strokeStyle = COL.line2; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, ground); ctx.lineTo(W, ground); ctx.stroke();
+  ctx.strokeStyle = COL.line;
+  for (let x = 0; x <= G.beam.L + 1e-9; x += 1) { ctx.beginPath(); ctx.moveTo(X(x), ground + 4); ctx.lineTo(X(x), ground + (x % 4 === 0 ? 12 : 8)); ctx.stroke(); }
+  ctx.fillStyle = COL.t3; ctx.font = '11px "IBM Plex Mono", monospace'; ctx.textAlign = 'center';
+  for (let x = 0; x <= G.beam.L + 1e-9; x += 4) ctx.fillText(x, X(x), ground + 26);
+
+  // 교각
+  G.beam.supports.forEach((s) => {
+    const px = X(xs[s]);
+    ctx.fillStyle = '#161a24'; ctx.fillRect(px - 8, y0 + 10, 16, ground - y0 - 10);
+    ctx.strokeStyle = COL.line2; ctx.strokeRect(px - 8.5, y0 + 9.5, 17, ground - y0 - 9.5);
+    ctx.fillStyle = COL.t3; ctx.beginPath(); ctx.moveTo(px, y0 + 5); ctx.lineTo(px - 9, y0 + 13); ctx.lineTo(px + 9, y0 + 13); ctx.closePath(); ctx.fill();
+  });
+
+  if (G.view === 'one') {
+    const w = G.modes[G.modeIdx].w, nm = G.norm[G.modeIdx];
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = 'rgba(108,155,255,0.4)'; ctx.lineWidth = 1;
+    [1, -1].forEach((sg) => { ctx.beginPath(); xs.forEach((x, i) => { const py = y0 - sg * (w[i] / nm) * A; i ? ctx.lineTo(X(x), py) : ctx.moveTo(X(x), py); }); ctx.stroke(); });
+    ctx.setLineDash([]);
+  }
+
+  // 상판
+  const yy = (i) => y0 - d[i] * A;
+  ctx.beginPath();
+  xs.forEach((x, i) => (i ? ctx.lineTo(X(x), yy(i) - 4) : ctx.moveTo(X(x), yy(i) - 4)));
+  for (let i = n - 1; i >= 0; i--) ctx.lineTo(X(xs[i]), yy(i) + 6);
+  ctx.closePath(); ctx.fillStyle = '#272d3b'; ctx.fill();
+  ctx.beginPath(); xs.forEach((x, i) => (i ? ctx.lineTo(X(x), yy(i) - 4) : ctx.moveTo(X(x), yy(i) - 4)));
+  ctx.strokeStyle = 'rgba(238,240,245,0.4)'; ctx.lineWidth = 1; ctx.stroke();
+
+  // 소켓, 센서
+  const hintAdd = G.hint && G.hint.add, hintRem = G.hint && G.hint.remove;
+  let maxR = 0; for (let i = 0; i < n; i++) maxR = Math.max(maxR, Math.abs(d[i]));
+  for (let i = 0; i < n; i++) {
+    const px = X(xs[i]), py = yy(i) - 4;
+    if (G.placed.has(i)) {
+      const p0 = G.pulse.get(i), age = p0 ? (now - p0) / 450 : 1;
+      if (age < 1) { ctx.strokeStyle = `rgba(245,165,36,${0.7 * (1 - age)})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(px, py - 6, 6 + age * 16, 0, 2 * Math.PI); ctx.stroke(); }
+      const sig = Math.abs(d[i]) / Math.max(0.35, maxR);
+      ctx.fillStyle = i === G.weakest ? 'rgba(229,72,77,0.45)' : 'rgba(245,165,36,0.45)';
+      ctx.fillRect(px - 1, py - 15 - sig * 30, 2, sig * 30);
+      ctx.fillStyle = i === G.weakest ? COL.bad : COL.me;
+      roundRect(px - 5.5, py - 14, 11, 11, 3); ctx.fill();
+      ctx.fillStyle = COL.bg; ctx.beginPath(); ctx.arc(px, py - 8.5, 1.8, 0, 2 * Math.PI); ctx.fill();
+    } else {
+      const hov = i === G.hover;
+      ctx.strokeStyle = hov ? COL.me : 'rgba(238,240,245,0.25)'; ctx.lineWidth = hov ? 1.5 : 1;
+      ctx.beginPath(); ctx.arc(px, py - 5, hov ? 5 : 2.5, 0, 2 * Math.PI); ctx.stroke();
+    }
+    if (i === hintAdd || i === hintRem) {
+      ctx.strokeStyle = i === hintRem ? COL.bad : COL.best; ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(px, py - 8, 14, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+
+  // 센서별 EfI 띠
+  const top = ground + 52, bh = H - top - 10;
+  ctx.font = '12px "IBM Plex Sans KR", sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = COL.t3;
+  ctx.fillText(G.efi ? '센서별 EfI · 빨간색이 가장 쓸모없는 센서' : '센서별 EfI · 센서가 모드 수보다 많아지면 나타납니다', padX() - 16, top - 4);
+  ctx.strokeStyle = COL.line; ctx.beginPath(); ctx.moveTo(padX() - 16, H - 10); ctx.lineTo(W - padX() + 16, H - 10); ctx.stroke();
+  if (G.efi) G.cur.forEach((i, j) => {
+    const h = Math.max(1, G.efi[j] * (bh - 14));
+    ctx.fillStyle = i === G.weakest ? COL.bad : 'rgba(245,165,36,0.7)';
+    roundRect(X(xs[i]) - 3, H - 10 - h, 6, h, 1.5); ctx.fill();
+  });
+
+  // 호버 라벨
+  if (G.hover >= 0) {
+    const i = G.hover, px = X(xs[i]), py = yy(i) - 40;
+    const j = G.cur.indexOf(i), txt = `x ${xs[i].toFixed(1)}${j >= 0 && G.efi ? `  EfI ${G.efi[j].toFixed(2)}` : ''}${G.placed.has(i) ? '  눌러서 빼기' : ''}`;
+    ctx.font = '12px "IBM Plex Mono", monospace'; const tw = ctx.measureText(txt).width + 16;
+    const bx = Math.min(W - tw - 4, Math.max(4, px - tw / 2));
+    ctx.fillStyle = COL.raised; roundRect(bx, py - 24, tw, 24, 6); ctx.fill();
+    ctx.strokeStyle = COL.line2; ctx.stroke();
+    ctx.fillStyle = COL.t1; ctx.textAlign = 'left'; ctx.fillText(txt, bx + 8, py - 8);
+  }
+}
+
+function slotAt(ev) {
+  const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
+  if (my < deckY() - amp() - 70 || my > deckY() + amp() + 30) return -1;
+  const x = ((mx - padX()) / (W - 2 * padX())) * G.beam.L;
+  const i = Math.round(x / G.beam.le);
+  if (i < 0 || i >= G.beam.nNode) return -1;
+  return Math.abs(X(G.beam.x[i]) - mx) <= Math.max(6, (W - 2 * padX()) / G.beam.nNode) ? i : -1;
+}
+
+let visible = true;
+function loop(now) {
+  requestAnimationFrame(loop);
+  if (!visible || $('gameView').hidden) return;
+  tickScore(); draw(now);
+}
+
+// ─────────── 대결 결과 ───────────
+function renderDuel() {
+  const box = $('gResult'); box.hidden = false;
+  const ref = G.bots.best.ld, me = G.score, bot = effOf(G.bots.efi.ld, ref), apx = effOf(G.bots.apx.ld, ref);
+  const entries = [
+    { k: 'me', name: '나', sub: '직접 배치', v: me, set: G.cur, c: COL.me },
+    { k: 'bot', name: 'EfI 봇', sub: '논문 제안식 Eq.(26)으로 순차 제거', v: bot, set: G.bots.efi.set, c: COL.bot },
+    { k: 'apx', name: '근사 봇', sub: '기존 촐레스키 근사 Eq.(18)', v: apx, set: G.bots.apx.set, c: COL.apx },
+    { k: 'best', name: '최고 기록', sub: '교환 탐색으로 찾은 배치', v: 100, set: G.bots.best.set, c: COL.best },
+  ].sort((a, b) => b.v - a.v);
+  $('gVerdict').textContent = me >= bot - 1e-6
+    ? (me > bot + 0.05 ? 'EfI 봇을 이겼습니다' : 'EfI 봇과 비겼습니다')
+    : me >= apx ? `근사 봇은 이겼지만 EfI 봇에 ${(bot - me).toFixed(1)}점 모자랍니다` : '근사 봇에게도 졌습니다. 빨간 센서부터 옮겨 보세요';
+  $('gLesson').textContent = bot > apx + 0.5
+    ? `같은 순차 제거라도 정확한 EfI를 쓴 봇이 근사식 봇보다 ${(bot - apx).toFixed(1)}점 높습니다. 논문이 말하는 차이가 바로 이것입니다.`
+    : '이 조건에서는 근사식도 거의 같은 답을 냅니다. 오차 상관이 약하면 근사의 좌표 왜곡이 작기 때문입니다.';
+  const L = G.beam.L;
+  $('gDuel').innerHTML = entries.map((e, r) => `
+    <div class="duel-row ${e.k}" style="--d:${r * 80}ms">
+      <span class="rank">${r + 1}</span>
+      <div class="who"><b>${e.name}</b><span>${e.sub}</span></div>
+      <svg class="mini" viewBox="0 0 400 28" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="0" y1="19" x2="400" y2="19" stroke="rgba(238,240,245,0.2)"/>
+        ${G.beam.supports.map((s) => `<path d="M${(G.beam.x[s] / L) * 392 + 4},19 l-4,7 h8z" fill="#7a8296"/>`).join('')}
+        ${e.set.map((i) => `<rect x="${(G.beam.x[i] / L) * 392 + 1}" y="10" width="6" height="7" rx="1.5" fill="${e.c}"/>`).join('')}
+      </svg>
+      <div class="bar"><i style="width:${Math.max(0, Math.min(100, e.v))}%;background:${e.c}"></i></div>
+      <span class="val">${e.v.toFixed(1)}</span>
+    </div>`).join('');
+}
+
+// ─────────── 단계, 저장 ───────────
 const STORE = 'efi-game-stars';
 const loadStars = () => { try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch { return {}; } };
 function saveStars(id, st) {
-  const all = loadStars();
-  if ((all[id] || 0) >= st) return;
+  const all = loadStars(); if ((all[id] || 0) >= st) return;
   all[id] = st; try { localStorage.setItem(STORE, JSON.stringify(all)); } catch {}
-  paintLevelStars();
+  paintLevels();
 }
-function paintLevelStars() {
+function paintLevels() {
   const all = loadStars();
-  document.querySelectorAll('#gLevels button').forEach((b) => {
-    const n = all[b.dataset.id] || 0, slot = b.querySelector('.lvs');
-    if (slot) slot.textContent = n ? '★'.repeat(n) : '';
+  $('gLevels').querySelectorAll('button').forEach((b) => {
+    const n = all[b.dataset.id] || 0;
+    b.querySelector('.lvs').innerHTML = b.dataset.id === '5' ? '' : [0, 1, 2].map((i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('');
+    b.setAttribute('aria-pressed', +b.dataset.id === G.level.id);
   });
 }
-
 function setLevel(lv) {
-  G.level = lv;
-  Object.assign(G, { spans: lv.spans, model: lv.model, lambda: lv.lambda, K: lv.K });
-  document.querySelectorAll('#gLevels button').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.id === lv.id));
-  $('gDesc').textContent = lv.desc;
-  $('gFree').hidden = !lv.free;
-  syncFree();
-  setup();
+  G.level = lv; Object.assign(G, { spans: lv.spans, model: lv.model, lambda: lv.lambda, K: lv.K });
+  $('gStep').textContent = lv.free ? '자유 실험' : `스테이지 ${lv.id} / 4`;
+  $('gTitle').textContent = lv.name; $('gDesc').textContent = lv.desc;
+  $('gFree').hidden = !lv.free; syncFree(); paintLevels(); setup();
+  $('gNext').hidden = lv.free;
 }
 function syncFree() {
   $('fSpans').value = G.spans; $('fModel').value = G.model; $('fLambda').value = G.lambda; $('fLambdaOut').textContent = (+G.lambda).toFixed(1);
-  $('fK').value = G.K; $('fKOut').textContent = G.K;
-  $('fLambda').disabled = G.model === 'identity';
+  $('fK').value = G.K; $('fKOut').textContent = G.K; $('fLambda').disabled = G.model === 'identity';
+}
+function setView(v) {
+  G.view = v;
+  document.querySelectorAll('#gModes button').forEach((x) => x.setAttribute('aria-pressed', x.dataset.v === v));
+  $('gModeStep').hidden = v !== 'one';
+  if (G.freq) $('gModeLabel').textContent = `모드 ${G.modeIdx + 1}  ω/ω₁ ${G.freq[G.modeIdx].toFixed(2)}`;
 }
 
 export function initGame() {
-  $('gLevels').innerHTML = LEVELS.map((lv) => `<button data-id="${lv.id}" aria-pressed="false"><span class="lvn">${lv.free ? '∞' : lv.id}</span>${lv.name}<span class="lvs"></span></button>`).join('');
-  paintLevelStars();
+  cv = $('scene'); ctx = cv.getContext('2d');
+  $('gLevels').innerHTML = LEVELS.map((lv) => `<button data-id="${lv.id}" aria-pressed="false"><span class="lvn">${lv.free ? '∞' : lv.id}</span><span class="lvt">${lv.name}</span><span class="lvs"></span></button>`).join('');
   $('gLevels').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => setLevel(LEVELS.find((l) => l.id === +b.dataset.id))));
   $('fSpans').innerHTML = SPAN_PRESETS.map((p) => `<option value="${p.v}">${p.name}</option>`).join('');
   $('fSpans').addEventListener('change', (e) => { G.spans = e.target.value; setup(); syncFree(); });
@@ -301,14 +382,24 @@ export function initGame() {
   $('fLambda').addEventListener('input', (e) => { G.lambda = +e.target.value; $('fLambdaOut').textContent = G.lambda.toFixed(1); clearTimeout(deb); deb = setTimeout(setup, 250); });
   $('fK').addEventListener('input', (e) => { G.K = +e.target.value; $('fKOut').textContent = G.K; clearTimeout(deb); deb = setTimeout(setup, 250); });
   $('gHint').addEventListener('click', useHint);
-  $('gReset').addEventListener('click', () => { G.placed = new Set(); G.hint = null; G.revealed = false; G.flash = ''; render(); });
-  $('gSubmit').addEventListener('click', () => { G.revealed = true; render(); $('gResult').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
-  $('gCopy').addEventListener('click', () => { if (!G.bots) return; G.placed = new Set(G.bots.efi.set); G.hint = null; render(); });
-  document.querySelectorAll('#gModes button').forEach((b) => b.addEventListener('click', () => {
-    G.showModes = b.dataset.v; document.querySelectorAll('#gModes button').forEach((x) => x.setAttribute('aria-pressed', x === b)); render();
-  }));
-  $('gModeIdx').addEventListener('input', (e) => { G.modeIdx = +e.target.value - 1; G.showModes = 'one'; document.querySelectorAll('#gModes button').forEach((x) => x.setAttribute('aria-pressed', x.dataset.v === 'one')); $('gModeIdxOut').textContent = e.target.value; render(); });
-  $('board').addEventListener('mouseleave', () => { G.hover = null; $('gHover').textContent = '칸을 눌러 센서를 놓거나 빼세요'; });
-  window.addEventListener('resize', () => { clearTimeout(deb); deb = setTimeout(render, 120); });
+  $('gReset').addEventListener('click', () => { G.placed = new Set(); G.hint = null; G.revealed = false; G.flash = ''; $('gResult').hidden = true; update(); });
+  $('gSubmit').addEventListener('click', () => {
+    G.revealed = true; update();
+    if (!G.level.free) saveStars(G.level.id, starsFor(G.score, effOf(G.bots.efi.ld, G.bots.best.ld)));
+    setTimeout(() => $('gResult').scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  });
+  $('gCopy').addEventListener('click', () => { G.placed = new Set(G.bots.efi.set); G.hint = null; G.revealed = false; $('gResult').hidden = true; update(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  $('gNext').addEventListener('click', () => { const i = LEVELS.indexOf(G.level); setLevel(LEVELS[Math.min(LEVELS.length - 1, i + 1)]); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  document.querySelectorAll('#gModes button').forEach((b) => b.addEventListener('click', () => setView(b.dataset.v)));
+  $('gModePrev').addEventListener('click', () => { G.modeIdx = (G.modeIdx + G.m - 1) % G.m; setView('one'); });
+  $('gModeNext').addEventListener('click', () => { G.modeIdx = (G.modeIdx + 1) % G.m; setView('one'); });
+
+  cv.addEventListener('mousemove', (ev) => { const i = slotAt(ev); G.hover = i; cv.style.cursor = i >= 0 ? 'pointer' : 'default'; });
+  cv.addEventListener('mouseleave', () => { G.hover = -1; });
+  cv.addEventListener('click', (ev) => { const i = slotAt(ev); if (i >= 0) toggle(i); });
+  new ResizeObserver(resize).observe(cv);
+  new IntersectionObserver(([e]) => (visible = e.isIntersecting)).observe(cv);
+  resize();
   setLevel(LEVELS[0]);
+  requestAnimationFrame(loop);
 }

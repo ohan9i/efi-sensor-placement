@@ -3,6 +3,7 @@ import { initGame } from './game.js';
 function show(view) {
   const game = view !== 'learn';
   document.getElementById('gameView').hidden = !game;
+  document.body.classList.toggle('dark', game);
   document.getElementById('top').hidden = game;
   document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', b.dataset.view === (game ? 'game' : 'learn')));
   window.scrollTo(0, 0);

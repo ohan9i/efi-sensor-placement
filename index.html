@@ -29,66 +29,97 @@
 </header>
 
 <main class="game" id="gameView">
-  <div class="g-head">
-    <div>
-      <p class="eyebrow">최적 센서 배치 게임 · Kim &amp; Cho (2024) MSSP 212</p>
-      <h1>센서를 직접 놓고, EfI 봇과 겨뤄 보세요</h1>
-      <p class="lede">보 위의 칸을 눌러 예산만큼 센서를 놓으면, 모드 10개를 얼마나 잘 구분할 수 있는지(det F)가 바로 점수가 됩니다. 제출하면 논문의 정확한 EfI로 순차 제거한 봇, 기존 근사식을 쓴 봇과 결과를 비교합니다.</p>
+  <section class="arena">
+    <div class="hud-top">
+      <div class="mission">
+        <p class="m-step" id="gStep">스테이지 1 / 4</p>
+        <h1 id="gTitle">워밍업</h1>
+        <p class="m-desc" id="gDesc"></p>
+      </div>
+      <div class="levels" id="gLevels" role="radiogroup" aria-label="단계"></div>
     </div>
-    <div class="levels" id="gLevels" role="radiogroup" aria-label="단계"></div>
-  </div>
 
-  <div class="g-grid">
-    <section class="g-board">
-      <div class="g-bar">
-        <p class="g-desc" id="gDesc"></p>
-        <div class="g-tools">
-          <div class="seg" id="gModes" role="radiogroup" aria-label="모드 형상 보기">
-            <button data-v="all" aria-pressed="true">모드 전체</button>
-            <button data-v="one" aria-pressed="false">한 개씩</button>
-            <button data-v="none" aria-pressed="false">숨기기</button>
-          </div>
-          <label class="slider tight"><span>모드</span><input type="range" id="gModeIdx" min="1" max="10" step="1" value="1"><output id="gModeIdxOut">1</output></label>
+    <div class="stage-wrap">
+      <canvas id="scene" aria-label="교량 위 센서 배치 판"></canvas>
+      <div class="hud-corner">
+        <div class="seg dark" id="gModes" role="radiogroup" aria-label="진동 보기">
+          <button data-v="all" aria-pressed="true">전체 진동</button>
+          <button data-v="one" aria-pressed="false">모드 하나</button>
+          <button data-v="still" aria-pressed="false">정지</button>
+        </div>
+        <div class="mode-step" id="gModeStep" hidden>
+          <button class="ibtn" id="gModePrev" aria-label="이전 모드"><svg viewBox="0 0 16 16"><path d="M10 3.5L5.5 8 10 12.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+          <span id="gModeLabel">모드 1</span>
+          <button class="ibtn" id="gModeNext" aria-label="다음 모드"><svg viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
         </div>
       </div>
-      <svg id="board" class="beam" role="img" aria-label="센서 배치 보드"></svg>
-      <div class="g-foot"><span id="gHover">칸을 눌러 센서를 놓거나 빼세요</span><span id="gStatus"></span></div>
-      <div class="g-free" id="gFree" hidden>
-        <label class="select"><span>구조</span><select id="fSpans"></select></label>
-        <label class="select"><span>오차 공분산</span><select id="fModel"><option value="eq29">Eq. 29 모드 유사도 × 거리</option><option value="eq28">Eq. 28 거리만</option><option value="identity">Σ = I 상관 없음</option></select></label>
-        <label class="slider"><span>상관 길이 λ</span><input type="range" id="fLambda" min="0.5" max="16" step="0.5"><output id="fLambdaOut"></output></label>
-        <label class="slider"><span>센서 예산</span><input type="range" id="fK" min="10" max="30" step="1"><output id="fKOut"></output></label>
-      </div>
-    </section>
+      <p class="tip" id="gTip">다리 위 소켓을 눌러 센서를 꽂으세요</p>
+    </div>
 
-    <aside class="g-side">
-      <div class="score">
-        <p class="s-label">정보 효율</p>
-        <p class="s-big"><span id="gScore">…</span><small>점</small></p>
-        <div class="stars" id="gStars"></div>
-        <p class="s-sub" id="gEntropy"></p>
-        <div class="budget"><span>센서</span><span id="gUsed"></span><span class="track"><i id="gUsedBar"></i></span></div>
+    <div class="hud-bottom">
+      <div class="tray">
+        <p class="hb-label">남은 센서</p>
+        <div class="pips" id="gPips"></div>
       </div>
       <p class="g-msg" id="gMsg"></p>
       <div class="g-actions">
-        <button class="btn primary" id="gSubmit">제출하고 대결</button>
-        <button class="btn" id="gHint">힌트 <span class="kc" id="gHintN">3</span></button>
+        <button class="btn hint" id="gHint"><svg class="i" viewBox="0 0 16 16"><path d="M8 1.5a4.5 4.5 0 0 0-2.5 8.2V11h5V9.7A4.5 4.5 0 0 0 8 1.5zM6 12.5h4M6.5 14.5h3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>힌트 <span class="kc" id="gHintN">3</span></button>
         <button class="btn" id="gReset">비우기</button>
+        <button class="btn go" id="gSubmit">대결 시작</button>
       </div>
-      <div class="g-result" id="gResult" hidden></div>
-      <button class="btn ghost" id="gCopy" hidden>EfI 봇 배치를 불러와서 고쳐 보기</button>
-      <details class="rules" open>
-        <summary>규칙과 점수</summary>
-        <ul>
-          <li>센서 하나 = 보의 한 위치에서 잰 수직 응답. 모드 형상 행렬 Φ의 한 행입니다.</li>
-          <li>배치의 정보량은 F = ΦᵀΣ⁻¹Φ 의 행렬식입니다. 클수록 모드를 정확히 구분합니다.</li>
-          <li>점수 100은 교환 탐색으로 찾은 최고 기록입니다. 별 하나는 70, 둘은 90, 셋은 EfI 봇 이상.</li>
-          <li>막대는 내 센서 각각의 EfI(빼면 잃는 det F 비율)입니다. 빨간 막대가 가장 쓸모없는 센서입니다.</li>
-          <li>지점 위는 응답이 0이라 정보가 없습니다. 오차가 상관되면 붙여 놓은 센서끼리 정보가 겹칩니다.</li>
-        </ul>
-      </details>
-    </aside>
-  </div>
+    </div>
+  </section>
+
+  <aside class="scorecard">
+    <div class="gauge">
+      <svg viewBox="0 0 200 200" aria-hidden="true">
+        <circle cx="100" cy="100" r="84" class="g-track"/>
+        <circle cx="100" cy="100" r="84" class="g-fill" id="gArc"/>
+        <circle cx="100" cy="100" r="84" class="g-bot" id="gBotTick"/>
+      </svg>
+      <div class="g-read">
+        <p class="g-num" id="gScore">0</p>
+        <p class="g-unit">정보 효율</p>
+        <p class="g-delta" id="gDelta"></p>
+      </div>
+    </div>
+    <div class="g-under"><div class="stars" id="gStars"></div><p class="g-bot"><i></i>EfI 봇 <span id="gBotMark">…</span></p></div>
+    <dl class="stats">
+      <div><dt>−ln det F</dt><dd id="gEntropy">—</dd></div>
+      <div><dt>가장 약한 센서</dt><dd id="gWeak">—</dd></div>
+      <div><dt>목표 모드</dt><dd id="gModesN">10</dd></div>
+    </dl>
+    <div class="free" id="gFree" hidden>
+      <p class="hb-label">자유 실험 설정</p>
+      <label class="select"><span>구조</span><select id="fSpans"></select></label>
+      <label class="select"><span>오차</span><select id="fModel"><option value="eq29">Eq. 29 모드×거리</option><option value="eq28">Eq. 28 거리</option><option value="identity">Σ = I</option></select></label>
+      <label class="slider"><span>상관 길이 λ</span><input type="range" id="fLambda" min="0.5" max="16" step="0.5"><output id="fLambdaOut"></output></label>
+      <label class="slider"><span>센서 수</span><input type="range" id="fK" min="10" max="30" step="1"><output id="fKOut"></output></label>
+    </div>
+    <details class="rules" open>
+      <summary>규칙</summary>
+      <ul>
+        <li>센서 = 그 위치의 수직 응답. 모드 형상 Φ의 한 행입니다</li>
+        <li>점수 = 배치의 det(ΦᵀΣ⁻¹Φ)를 최고 기록 대비 100점으로 환산</li>
+        <li>지점(교각) 위는 진동이 0이라 정보가 없습니다</li>
+        <li>오차가 상관되면 붙어 있는 센서끼리 정보가 겹칩니다</li>
+        <li>별 1개 70점, 2개 90점, 3개는 EfI 봇 이상</li>
+      </ul>
+    </details>
+  </aside>
+
+  <section class="duel" id="gResult" hidden>
+    <div class="duel-head">
+      <p class="m-step">결과</p>
+      <h2 id="gVerdict"></h2>
+      <p class="lesson" id="gLesson"></p>
+    </div>
+    <div class="duel-grid" id="gDuel"></div>
+    <div class="duel-foot">
+      <button class="btn" id="gCopy">EfI 봇 배치로 다시 시작</button>
+      <button class="btn go" id="gNext">다음 단계</button>
+    </div>
+  </section>
 </main>
 
 <div class="shell" id="top" hidden>
