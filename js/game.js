@@ -1,7 +1,7 @@
 // 게임: 진동하는 연속보(논문 4장) 위에 센서를 꽂고 EfI 봇과 정보량(det F)으로 대결
-import { invSPD, logdetSPD, matmul, transpose, rowsOf, sub } from './linalg.js';
-import { efiProposed, buildSigma, sequentialDeletion, activeAt, argminTol } from './efi.js';
-import { buildBeam, selectModes, buildShear, firstModes } from './beam.js';
+import { invSPD, logdetSPD, matmul, transpose, rowsOf, sub } from './linalg.js?v=1794145072';
+import { efiProposed, buildSigma, sequentialDeletion, activeAt, argminTol } from './efi.js?v=1794145072';
+import { buildBeam, selectModes, buildShear, firstModes } from './beam.js?v=1794145072';
 
 const $ = (id) => document.getElementById(id);
 const COL = {

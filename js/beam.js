@@ -1,5 +1,5 @@
 // 연속보 유한요소 모델 (논문 4장, Eq. 27) — 휨 변형만 고려한 오일러-베르누이 보 요소
-import { zeros, cholesky, invLower, matmul, transpose, symEig } from './linalg.js';
+import { zeros, cholesky, invLower, matmul, transpose, symEig } from './linalg.js?v=1794145072';
 
 export function buildBeam(spans = [8, 12, 12, 8], le = 0.5) {
   const nEl = spans.reduce((a, s) => a + Math.round(s / le), 0);
