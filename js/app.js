@@ -1,6 +1,6 @@
-import { fromArray, invSPD, invSqrtSPD, cholesky, matmul, rowsOf, sub } from './linalg.js?v=1794145072';
-import { efiDefinition, efiProposed, efiFactor, METHODS, buildSigma, sequentialDeletion, activeAt, argminTol } from './efi.js?v=1794145072';
-import { buildBeam, selectModes } from './beam.js?v=1794145072';
+import { fromArray, invSPD, invSqrtSPD, cholesky, matmul, rowsOf, sub } from './linalg.js?v=1794145799';
+import { efiDefinition, efiProposed, efiFactor, METHODS, buildSigma, sequentialDeletion, activeAt, argminTol } from './efi.js?v=1794145799';
+import { buildBeam, selectModes } from './beam.js?v=1794145799';
 
 const $ = (id) => document.getElementById(id);
 const NS = 'http://www.w3.org/2000/svg';

@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="vendor/katex/katex.min.css">
 <script defer src="vendor/katex/katex.min.js"></script>
 <script defer src="vendor/katex/auto-render.min.js"></script>
-<link rel="stylesheet" href="css/style.css?v=1794145072">
+<link rel="stylesheet" href="css/style.css?v=1794145799">
 </head>
 <body>
 <header class="bar">
@@ -97,14 +97,9 @@
       <label class="slider"><span>센서 수</span><input type="range" id="fK" min="10" max="30" step="1"><output id="fKOut"></output></label>
     </div>
     <details class="rules" open>
-      <summary>규칙</summary>
-      <ul>
-        <li>센서 = 그 층의 수평 응답. 모드 형상 Φ의 한 행입니다</li>
-        <li>점수 = 배치의 det(ΦᵀΣ⁻¹Φ)를 최고 기록 대비 100점으로 환산</li>
-        <li>건물은 위층일수록 흔들림이 크지만, 높은 차수 모드는 중간층에서 0이 되는 곳이 생깁니다</li>
-        <li>오차가 상관되면 붙어 있는 센서끼리 정보가 겹칩니다</li>
-        <li>별 1개 70점, 2개 90점, 3개는 EfI 봇 이상</li>
-      </ul>
+      <summary>공략 가이드</summary>
+      <ol class="guide" id="gGuide"></ol>
+      <p class="score-rule">점수는 배치의 det(ΦᵀΣ⁻¹Φ)를 최고 기록 대비 100점으로 환산한 값입니다. 별은 70점, 90점, 그리고 EfI 봇 이상에서 하나씩.</p>
     </details>
   </aside>
 
@@ -115,6 +110,19 @@
       <p class="lesson" id="gLesson"></p>
     </div>
     <div class="duel-grid" id="gDuel"></div>
+    <div class="why">
+      <h3 id="gWhyTitle"></h3>
+      <div class="why-body">
+        <div class="why-modes">
+          <p class="cap">모드별 정보량 <span>최고 기록 = 100%</span></p>
+          <div id="gWhyModes"></div>
+        </div>
+        <div>
+          <ol class="reasons" id="gWhyList"></ol>
+          <p class="fix" id="gWhyFix" hidden></p>
+        </div>
+      </div>
+    </div>
     <div class="duel-foot">
       <button class="btn" id="gCopy">EfI 봇 배치로 다시 시작</button>
       <button class="btn go" id="gNext">다음 단계</button>
@@ -240,7 +248,7 @@
     <p class="meta" id="meta"></p>
   </aside>
 </div>
-<script type="module" src="js/app.js?v=1794145072"></script>
-<script type="module" src="js/main.js?v=1794145072"></script>
+<script type="module" src="js/app.js?v=1794145799"></script>
+<script type="module" src="js/main.js?v=1794145799"></script>
 </body>
 </html>

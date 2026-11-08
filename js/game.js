@@ -1,7 +1,7 @@
 // 게임: 진동하는 연속보(논문 4장) 위에 센서를 꽂고 EfI 봇과 정보량(det F)으로 대결
-import { invSPD, logdetSPD, matmul, transpose, rowsOf, sub } from './linalg.js?v=1794145072';
-import { efiProposed, buildSigma, sequentialDeletion, activeAt, argminTol } from './efi.js?v=1794145072';
-import { buildBeam, selectModes, buildShear, firstModes } from './beam.js?v=1794145072';
+import { invSPD, logdetSPD, matmul, transpose, rowsOf, sub } from './linalg.js?v=1794145799';
+import { efiProposed, buildSigma, sequentialDeletion, activeAt, argminTol } from './efi.js?v=1794145799';
+import { buildBeam, selectModes, buildShear, firstModes } from './beam.js?v=1794145799';
 
 const $ = (id) => document.getElementById(id);
 const COL = {
@@ -171,7 +171,7 @@ function update() {
   $('gHint').disabled = G.hints <= 0 || !G.bots; $('gHintN').textContent = G.hints;
   $('gSubmit').disabled = !G.bots || cur.length !== G.K;
   let msg = G.flash;
-  if (!msg && G.hint) msg = G.hint.none ? '한 개만 바꿔서 나아질 곳이 없습니다. 거의 최적이에요' : G.hint.remove != null ? `${posLabel(G.hint.remove)} 센서를 ${posLabel(G.hint.add)}로 옮겨 보세요` : `${posLabel(G.hint.add)}에 꽂으면 정보가 가장 많이 늘어납니다`;
+  if (!msg && G.hint) msg = G.hint.none ? '한 개만 바꿔서 나아질 곳이 없습니다. 거의 최적이에요' : G.hint.remove != null ? `${posLabel(G.hint.remove)} 센서를 ${posLabel(G.hint.add)}으로 옮겨 보세요` : `${posLabel(G.hint.add)}에 꽂으면 정보가 가장 많이 늘어납니다`;
   if (!msg && !G.bots) msg = '상대 봇이 배치를 계산하는 중';
   else if (!msg && cur.length < G.m) msg = `모드 ${G.m}개를 구분하려면 센서가 최소 ${G.m}개 필요합니다`;
   else if (!msg && cur.length === G.K) msg = '센서를 다 꽂았습니다. 대결을 시작하거나 위치를 다듬으세요';
@@ -420,7 +420,7 @@ function renderDuel() {
   ].sort((a, b) => b.v - a.v);
   $('gVerdict').textContent = me >= bot - 1e-6
     ? (me > bot + 0.05 ? 'EfI 봇을 이겼습니다' : 'EfI 봇과 비겼습니다')
-    : me >= apx ? `근사 봇은 이겼지만 EfI 봇에 ${(bot - me).toFixed(1)}점 모자랍니다` : '근사 봇에게도 졌습니다. 빨간 센서부터 옮겨 보세요';
+    : me >= apx ? `근사 봇은 이겼지만 EfI 봇에 ${(bot - me).toFixed(1)}점 모자랍니다` : `근사 봇에게도 졌습니다. ${G.K > G.m ? '빨간 센서부터 옮겨 보세요' : '아래 진단을 보고 자리를 바꿔 보세요'}`;
   $('gLesson').textContent = bot > apx + 0.5
     ? `같은 순차 제거라도 정확한 EfI를 쓴 봇이 근사식 봇보다 ${(bot - apx).toFixed(1)}점 높습니다. 논문이 말하는 차이가 바로 이것입니다.`
     : '이 조건에서는 근사식도 거의 같은 답을 냅니다. 오차 상관이 약하면 근사의 좌표 왜곡이 작기 때문입니다.';
@@ -437,6 +437,96 @@ function renderDuel() {
       <div class="bar"><i style="width:${Math.max(0, Math.min(100, e.v))}%;background:${e.c}"></i></div>
       <span class="val">${e.v.toFixed(1)}</span>
     </div>`).join('');
+  renderWhy();
+}
+
+// ─────────── 내 배치 진단: 왜 정보효율이 낮은가 ───────────
+function fisherInv(set) {
+  const idx = [...set].sort((a, b) => a - b);
+  const W = invSPD(sub(G.Sigma, idx)), S = rowsOf(G.Phi, idx);
+  return invSPD(matmul(transpose(S), matmul(W, S)));
+}
+// k차 모드가 크게 흔들리는 구간(|φ| ≥ 최대의 70%, 같은 부호로 이어진 층들)
+function lobes(k) {
+  const col = G.Phi.map((r) => r[k]), n = col.length, mx = Math.max(...col.map(Math.abs)), out = [];
+  let a = -1;
+  for (let i = 0; i <= n; i++) {
+    const big = i < n && Math.abs(col[i]) >= 0.7 * mx;
+    const cont = big && a >= 0 && Math.sign(col[i]) === Math.sign(col[a]);
+    if (a >= 0 && !cont) { out.push({ a, b: i - 1 }); a = -1; }
+    if (big && a < 0) a = i;
+  }
+  return out;
+}
+const rangeLabel = ({ a, b }) => (G.bld ? (a === b ? `${a + 1}층` : `${a + 1}–${b + 1}층`) : `x = ${G.beam.x[a].toFixed(1)}–${G.beam.x[b].toFixed(1)}`);
+const ampRel = (i, k) => { const col = G.Phi.map((r) => Math.abs(r[k])); return col[i] / Math.max(...col); };
+const maxCorr = (set) => {
+  let best = { r: 0, i: -1, j: -1 };
+  for (let p = 0; p < set.length; p++) for (let q = p + 1; q < set.length; q++) {
+    const i = set[p], j = set[q], r = G.Sigma[i][j] / Math.sqrt(G.Sigma[i][i] * G.Sigma[j][j]);
+    if (r > best.r) best = { r, i, j };
+  }
+  return best;
+};
+
+function diagnose() {
+  const cur = [...G.cur].sort((a, b) => a - b), best = G.bots.best.set, ref = G.bots.best.ld, top = G.beam.nNode - 1;
+  if (cur.length < G.m) return { modes: [], items: [{ t: `센서가 모드 수(${G.m}개)보다 적습니다`, d: '미지수(모드 좌표)가 측정값보다 많아 det F = 0, 점수도 0이 됩니다.' }], fix: '' };
+  const Fm = fisherInv(cur), Fb = fisherInv(best);
+  // 모드별 정보량: 최고 기록의 추정 분산 ÷ 내 추정 분산 (100% = 최고 기록만큼 잘 봄)
+  const modes = Array.from({ length: G.m }, (_, k) => ({ k, v: (Fb[k][k] / Fm[k][k]) * 100 }));
+  const near = G.score >= 99.5;
+  const items = [];
+  if (!cur.includes(top) && best.includes(top) && G.bld) {
+    items.push({ t: '옥상이 비어 있습니다', d: `${top + 1}층은 모든 모드가 크게 흔들리는 층입니다. 센서 하나로 ${G.m}개 모드를 한꺼번에 보는 자리라 최고 기록은 반드시 여기 센서를 둡니다.` });
+  }
+  const worst = modes.reduce((a, b) => (b.v < a.v ? b : a));
+  if (worst.v < 85) {
+    const k = worst.k, ls = lobes(k), empty = ls.filter((l) => !cur.some((i) => i >= l.a && i <= l.b));
+    const nodal = cur.filter((i) => ampRel(i, k) < 0.25);
+    const ratio = 100 / worst.v;
+    let d = `이 배치로 ${k + 1}차 모드를 추정하면 오차 분산이 최고 기록의 ${ratio > 100 ? '100배가 넘습니다' : `${ratio.toFixed(1)}배입니다`}.`;
+    if (empty.length === ls.length) d += ` ${k + 1}차 모드가 크게 흔들리는 ${ls.map(rangeLabel).join(', ')}에 센서가 하나도 없습니다.`;
+    else if (empty.length) d += ` ${k + 1}차 모드가 크게 흔들리는 곳은 ${ls.map(rangeLabel).join(', ')}인데, 그중 ${empty.map(rangeLabel).join(', ')}이 비어 있습니다.`;
+    if (nodal.length) d += ` ${nodal.map(posLabel).join(', ')} 센서는 이 모드가 거의 움직이지 않는 자리(절이나 지면 근처)라 도움이 안 됩니다.`;
+    items.push({ t: `${k + 1}차 모드를 잘 못 봅니다`, d });
+  }
+  if (G.model !== 'identity') {
+    const c = maxCorr(cur), cb = maxCorr(best);
+    if (c.r >= 0.45 && c.r > cb.r + 0.05) items.push({ t: `${posLabel(c.i)}과 ${posLabel(c.j)} 센서가 너무 붙어 있습니다`, d: `두 센서의 오차 상관이 ρ = ${c.r.toFixed(2)}입니다(최고 기록은 최대 ${cb.r.toFixed(2)}). 같은 잡음을 함께 받으니 두 번째 센서가 주는 새 정보가 그만큼 줄어듭니다.` });
+  }
+  if (G.efi && G.weakest >= 0 && !near) {
+    const e = G.efi[cur.indexOf(G.weakest)];
+    items.push({ t: `${posLabel(G.weakest)} 센서가 가장 일을 덜 합니다`, d: `EfI = ${e.toFixed(2)}. 이 센서를 빼도 det F가 ${(e * 100).toFixed(0)}%만 줄어든다는 뜻입니다. EfI 봇이 가장 먼저 지우는 후보가 바로 이런 센서입니다.` });
+  }
+  // 처방: 한 개만 옮겨서 가장 많이 오르는 수
+  let fix = '';
+  if (!near) {
+    const inSet = new Set(cur); let bv = logdetOf(cur), sw = null;
+    for (let a = 0; a < cur.length; a++) for (let b = 0; b < G.beam.nNode; b++) {
+      if (inSet.has(b)) continue;
+      const t = cur.slice(); t[a] = b; const v = logdetOf(t);
+      if (v > bv + 1e-9) { bv = v; sw = [cur[a], b]; }
+    }
+    if (sw) fix = `${posLabel(sw[0])} 센서를 ${posLabel(sw[1])}으로 옮기면 ${G.score.toFixed(1)} → ${effOf(bv, ref).toFixed(1)}점 (+${(effOf(bv, ref) - G.score).toFixed(1)})`;
+  }
+  if (near) {
+    const c = maxCorr(cur);
+    items.length = 0;
+    items.push({ t: '모든 모드를 고르게 봅니다', d: `모드별 정보량이 모두 최고 기록 수준입니다. 각 모드가 크게 흔들리는 구간마다 센서가 걸쳐 있습니다.` });
+    if (cur.includes(top) && G.bld) items.push({ t: '옥상을 잡았습니다', d: '모든 모드가 크게 움직이는 층이라 센서 하나의 값어치가 가장 큽니다.' });
+    if (G.model !== 'identity') items.push({ t: '센서 간격이 적당합니다', d: `가장 가까운 두 센서의 오차 상관도 ρ = ${c.r.toFixed(2)} 수준이라 서로 정보가 크게 겹치지 않습니다.` });
+  }
+  return { modes, items: items.slice(0, 3), fix, near };
+}
+
+function renderWhy() {
+  const r = diagnose();
+  $('gWhyTitle').textContent = r.near ? '왜 좋은 배치인가' : G.score >= effOf(G.bots.efi.ld, G.bots.best.ld) - 1e-6 ? '최고 기록과의 차이는 어디서 생기나' : '내 배치는 왜 정보효율이 낮을까';
+  $('gWhyModes').innerHTML = r.modes.map(({ k, v }) => `
+    <div class="mb ${v < 85 ? 'low' : ''}"><span>${k + 1}차</span><div class="bar"><i style="width:${Math.min(100, v)}%"></i></div><b>${v < 1 ? '<1' : v.toFixed(0)}%</b></div>`).join('');
+  $('gWhyList').innerHTML = r.items.map((it) => `<li><b>${it.t}</b><span>${it.d}</span></li>`).join('');
+  $('gWhyFix').hidden = !r.fix; $('gWhyFix').innerHTML = r.fix ? `<b>처방</b> ${r.fix}` : '';
 }
 
 // ─────────── 단계, 저장 ───────────
@@ -461,6 +551,25 @@ function setLevel(lv) {
   $('gTitle').textContent = lv.name; $('gDesc').textContent = lv.desc;
   $('gFree').hidden = !lv.free; syncFree(); paintLevels(); setup();
   $('gNext').hidden = lv.id === LEVELS.length;
+  renderGuide();
+}
+
+// ─────────── 공략 가이드 (스테이지별) ───────────
+function renderGuide() {
+  const N = G.beam.nNode, m = G.m, hi = lobes(m - 1).map(rangeLabel).join(', ');
+  const tips = [
+    ['옥상부터 잡으세요', `꼭대기(${N}층)는 ${m}개 모드가 한꺼번에 크게 흔들리는 자리입니다. 센서 하나로 모든 모드를 보니 첫 센서는 거의 항상 여기입니다.`],
+    [`${m}차 모드의 배를 노리세요`, `모드가 높을수록 크게 흔들리는 구간이 잘게 나뉩니다. 이 스테이지에서 ${m}차 모드가 큰 곳은 ${hi}. 화면 오른쪽 위 ‘모드 하나’로 직접 확인하세요.`],
+    ['절은 피하세요', '모드 형상이 0을 지나는 층에 둔 센서는 그 모드를 보지 못합니다. 여러 모드의 절이 겹치는 층은 최악의 자리입니다.'],
+    G.model === 'identity'
+      ? ['이번엔 간격 걱정이 없습니다', '오차가 서로 독립(Σ = I)이라 붙여 둬도 손해가 없습니다. 진폭과 모드 구분만 생각하세요.']
+      : ['뭉치지 마세요', `오차 상관 길이가 λ = ${G.lambda}층입니다. ${G.lambda}층 안쪽 센서끼리는 같은 잡음을 받아 정보가 겹칩니다. 큰 구간을 고르게 나눠 맡기세요.`],
+    G.K > m
+      ? ['빨간 센서부터 옮기세요', '빨간 막대는 EfI가 가장 낮은 센서, 즉 빼도 손해가 가장 적은 센서입니다. 논문의 봇도 이 센서를 하나씩 지워 가며 배치를 만듭니다.']
+      : ['한 개도 버릴 수 없습니다', `센서 수가 모드 수와 같아(${m}개) 모든 센서의 EfI가 1입니다. 하나라도 빠지면 모드를 구분할 수 없으니 자리 하나하나가 결정적입니다.`],
+    ['힌트는 아껴 쓰세요', '스테이지마다 3번. 지금 배치에서 한 수로 가장 많이 오르는 자리를 알려 줍니다.'],
+  ];
+  $('gGuide').innerHTML = tips.map(([t, d]) => `<li><b>${t}</b><span>${d}</span></li>`).join('');
 }
 function syncFree() {
   $('fSpans').value = G.spans; $('fModel').value = G.model; $('fLambda').value = G.lambda; $('fLambdaOut').textContent = (+G.lambda).toFixed(1);

@@ -1,5 +1,5 @@
 // 유효독립성(EfI) 계산 — 논문의 4가지 대안
-import { matmul, transpose, invSPD, logdetSPD, cholesky, invSqrtSPD, sub, rowsOf, zeros } from './linalg.js?v=1794145072';
+import { matmul, transpose, invSPD, logdetSPD, cholesky, invSqrtSPD, sub, rowsOf, zeros } from './linalg.js?v=1794145799';
 
 export const fim = (S, W) => matmul(transpose(S), matmul(W, S)); // F = Sᵀ Σ⁻¹ S
 

@@ -1,4 +1,4 @@
-import { initGame } from './game.js?v=1794145072';
+import { initGame } from './game.js?v=1794145799';
 
 function show(view) {
   const game = view !== 'learn';
