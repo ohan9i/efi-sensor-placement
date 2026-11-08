@@ -3,169 +3,145 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EfI 센서 배치 시뮬레이터 — 완전 오차 공분산을 고려한 유효독립성</title>
+<title>센서 하나를 뺄 때 잃는 것 · EfI 센서 배치 시뮬레이터</title>
+<meta name="description" content="Kim & Cho (2024) 논문의 정확한 유효독립성(EfI) 식을 4경간 연속보 위에서 직접 확인하는 시뮬레이터">
+<link rel="stylesheet" href="vendor/fonts/plex-sans-kr.css">
+<link rel="stylesheet" href="vendor/fonts/plex-mono.css">
 <link rel="stylesheet" href="vendor/katex/katex.min.css">
 <script defer src="vendor/katex/katex.min.js"></script>
 <script defer src="vendor/katex/auto-render.min.js"></script>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<header>
-  <h1>유효독립성(EfI) 센서 배치 시뮬레이터</h1>
-  <p class="sub">Kim &amp; Cho (2024), <i>Effective independence in optimal sensor placement associated with general Fisher information involving full error covariance matrix</i>, MSSP 212, 111263 을 직접 만져보며 이해하기</p>
+<header class="bar">
+  <a class="mark" href="#top">
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 12h16" stroke="currentColor" stroke-width="1.5"/><path d="M4 12l-2 4h4z M16 12l-2 4h4z" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="8" y="7" width="4" height="4" fill="currentColor"/></svg>
+    EfI 센서 배치 시뮬레이터
+  </a>
   <nav>
-    <a href="#concept">① 핵심 개념</a>
-    <a href="#toy">② 3센서 예제</a>
-    <a href="#beam">③ 연속보 케이스 스터디</a>
-    <a href="#proof">④ 왜 제안식이 정확한가</a>
+    <a href="https://doi.org/10.1016/j.ymssp.2024.111263" target="_blank" rel="noopener">논문</a>
+    <a href="https://github.com/ohan9i/efi-sensor-placement" target="_blank" rel="noopener">소스</a>
   </nav>
 </header>
 
-<main>
-<section id="concept">
-  <h2>① 핵심 개념 한눈에</h2>
-  <div class="grid3">
-    <div class="card">
-      <h3>피셔 정보행렬 (FIM)</h3>
-      <p>측정값이 $x = S\theta + \varepsilon,\ \varepsilon\sim N(0,\Sigma)$ 이면</p>
-      <p class="eq">$$F = S^T \Sigma^{-1} S$$</p>
-      <p>$S$의 각 <b>행</b> = 센서 하나(채널). 모드 식별에서는 $S=\Phi$ (모드형상). $\det F$가 클수록 파라미터를 정확하게 추정할 수 있어요 (D-최적성).</p>
+<div class="shell" id="top">
+  <article class="story">
+    <div class="intro">
+      <p class="eyebrow">Kim &amp; Cho, Mechanical Systems and Signal Processing 212 (2024)</p>
+      <h1>센서 하나를 뺄 때, 무엇을 잃는가</h1>
+      <p class="lede">오차가 서로 상관된 상황에서 흔히 쓰던 EfI 근사식은 엉뚱한 센서를 지웁니다. 4경간 연속보 위에서 센서를 직접 지워 보며, 논문이 제안한 정확한 식이 왜 필요한지 확인해 보세요.</p>
     </div>
-    <div class="card">
-      <h3>유효독립성 (EfI)</h3>
-      <p>센서 $i$를 빼면 $\det F$가 얼마나 줄어드는가:</p>
-      <p class="eq">$$e_i = 1 - \frac{\det F_{-i}}{\det F}$$</p>
-      <p>$e_i\approx 0$: 빼도 손해 없음, $e_i=1$: 빼면 FIM이 특이해짐. <b>순차 제거법</b>은 매 단계 $e_i$가 가장 작은 센서를 하나씩 지웁니다.</p>
-    </div>
-    <div class="card">
-      <h3>문제와 해결</h3>
-      <p>$\Sigma=I$ 일 때는 깔끔한 공식 $e=\mathrm{diag}(SF^{-1}S^T)$ 이 있지만, 상관된 오차($\Sigma$가 full)일 때 흔히 쓰던 $\Sigma^{-1}=LL^T$ 분해 근사</p>
+
+    <section class="ch" data-ch="1">
+      <p class="num">01</p>
+      <h2>81개 후보, 10개의 센서</h2>
+      <p>길이 40의 연속보를 0.5 간격 80개 요소로 나누면 센서를 둘 수 있는 위치가 81곳 생깁니다. 휨만 고려한 질량·강성 행렬(Eq. 27)로 고유치 문제를 풀고, 진동수가 1차의 10배 이하인 모드 10개만 남깁니다.</p>
+      <p>이 모드 형상 행렬 $\Phi$의 각 <b>행</b>이 센서 하나입니다. 측정값 $x=\Phi q+\varepsilon$ 에서 모드 좌표 $q$를 얼마나 잘 추정할 수 있는지가 피셔 정보행렬입니다.</p>
+      <p class="eq">$$F=\Phi^T\Sigma^{-1}\Phi$$</p>
+      <p class="aside">오른쪽 목록에서 모드를 골라 형상을 보세요. 경간 8–12–12–8은 논문 그림의 총 길이 40, 최장 경간 12에 맞춘 가정입니다.</p>
+    </section>
+
+    <section class="ch" data-ch="2">
+      <p class="num">02</p>
+      <h2>센서 하나의 몫, EfI</h2>
+      <p>센서 $i$를 뺐을 때 $\det F$가 줄어드는 비율이 유효독립성입니다.</p>
+      <p class="eq">$$e_i = 1-\frac{\det F_{-i}}{\det F}$$</p>
+      <p>0에 가까우면 빼도 거의 손해가 없고, 1이면 빼는 순간 $F$가 특이해집니다. 순차 제거법은 매 단계 $e_i$가 가장 작은 센서를 하나씩 지웁니다.</p>
+      <p class="aside">막대 위에 커서를 올리면 그 센서를 뺄 때 잃는 정보가 나옵니다. 지점 위 센서는 응답이 0이라 EfI도 0입니다.</p>
+    </section>
+
+    <section class="ch" data-ch="3">
+      <p class="num">03</p>
+      <h2>오차가 서로 닮을 때</h2>
+      <p>가까이 붙은 센서는 모델 오차도 비슷하게 겪습니다. 이 상관을 공분산 $\Sigma$의 비대각 성분으로 넣으면, 같은 정보를 두 번 세지 않게 되어 센서가 한곳에 몰리지 않습니다.</p>
+      <p class="eq">$$\rho_{ij}=\Big\{\tfrac{1}{m}\textstyle\sum_k \tfrac{\min(|\Phi_{ik}|,|\Phi_{jk}|)}{\max(|\Phi_{ik}|,|\Phi_{jk}|)}\Big\}\,e^{-\delta_{ij}/\lambda}$$</p>
+      <div class="ctrl">
+        <div class="seg" id="covModel" role="radiogroup" aria-label="공분산 모델">
+          <button data-v="eq29" aria-pressed="true">Eq. 29</button>
+          <button data-v="eq28">Eq. 28</button>
+          <button data-v="identity">Σ = I</button>
+        </div>
+        <label class="slider"><span>상관 길이 λ</span><input type="range" id="lambda" min="0.5" max="12" step="0.5" value="4"><output id="lambdaOut">4.0</output></label>
+      </div>
+      <p class="aside">보 위를 클릭하면 그 센서와 나머지 센서 사이의 상관이 그려집니다. 논문은 10차 모드의 반파장에 맞춰 λ = 12 / 3 = 4를 썼습니다.</p>
+    </section>
+
+    <section class="ch" data-ch="4">
+      <p class="num">04</p>
+      <h2>지름길의 함정</h2>
+      <p>$\Sigma=I$ 이면 $e=\mathrm{diag}(SF^{-1}S^T)$ 라는 깔끔한 식이 있습니다. 그래서 $\Sigma^{-1}=LL^T$ 로 쪼갠 뒤 $S_{eq}=L^TS$ 를 대입하는 근사가 널리 쓰였습니다.</p>
       <p class="eq">$$e_{eq}=\mathrm{diag}(L^TSF^{-1}S^TL)$$</p>
-      <p>는 <span class="bad">좌표가 섞여</span> 틀린 센서를 지울 수 있어요. 논문의 <span class="good">정확한 식</span>:</p>
+      <p>문제는 $L$이 센서 좌표를 섞는다는 점입니다. $L^TS$의 $i$번째 행은 더 이상 $i$번 센서가 아닙니다. 논문 Table 1의 세 센서 예제로 직접 확인해 보세요.</p>
+      <div class="toy">
+        <div class="seg" id="toyPreset" role="radiogroup" aria-label="예제">
+          <button data-v="ex1" aria-pressed="true">예제 1 · 순열 L</button>
+          <button data-v="ex2">예제 2 · ρ₁₃ = 0.8</button>
+        </div>
+        <div class="toymat" id="toyMat"></div>
+        <label class="slider"><span>ρ₁₃</span><input type="range" id="toyRho" min="-0.9" max="0.9" step="0.05" value="0"><output id="toyRhoOut">0.00</output></label>
+        <label class="select"><span>분해 L</span>
+          <select id="toyFactor">
+            <option value="sqrt">Σ^-1/2 (행렬 제곱근)</option>
+            <option value="chol">촐레스키 하삼각</option>
+            <option value="perm">Σ^-1/2 · P₁₂ (순열)</option>
+          </select>
+        </label>
+        <table class="nums" id="toyTable"></table>
+        <p class="verdict" id="toyVerdict"></p>
+      </div>
+      <p>논문의 해법은 양쪽에 $L$을 한 번 더 곱해 $LL^T=\Sigma^{-1}$ 로 원래 좌표를 되찾고, $\mathrm{diag}(\Sigma^{-1})$ 로 나누는 것입니다.</p>
       <p class="eq">$$e=\mathrm{diag}(\Sigma^{-1}SF^{-1}S^T\Sigma^{-1})\oslash\mathrm{diag}(\Sigma^{-1})$$</p>
-    </div>
-  </div>
-</section>
+      <p class="aside">오른쪽은 연속보에서 같은 센서 집합에 네 방법을 적용한 결과입니다. 빨간 동그라미는 정확한 답과 다른 센서를 고른 경우입니다.</p>
+    </section>
 
-<section id="toy">
-  <h2>② 3센서 · 2파라미터 예제 (논문 Table 1)</h2>
-  <p class="hint">센서 3개, 미지수 2개. $S$의 행 벡터(센서)를 그림으로 보고, 오차 상관과 분해 방식을 바꿔가며 어떤 계산법이 <b>진짜 EfI(정의식)</b>와 일치하는지 확인해 보세요. 빨간 테두리는 "다음에 제거될 센서"입니다.</p>
-  <div class="row">
-    <div class="card controls">
-      <div class="btns">
-        <button data-preset="ex1">예제 1 (Σ=I, 순열 L)</button>
-        <button data-preset="ex2">예제 2 (ρ₁₃=0.8, L=Σ^-1/2)</button>
-      </div>
-      <h4>민감도 행렬 S (센서 × 파라미터)</h4>
-      <table class="mat" id="Sinput"></table>
-      <h4>오차 공분산 Σ</h4>
-      <label>σ₁² <input type="range" id="v1" min="0.2" max="3" step="0.05"><span></span></label>
-      <label>σ₂² <input type="range" id="v2" min="0.2" max="3" step="0.05"><span></span></label>
-      <label>σ₃² <input type="range" id="v3" min="0.2" max="3" step="0.05"><span></span></label>
-      <label>ρ₁₂ <input type="range" id="r12" min="-0.95" max="0.95" step="0.01"><span></span></label>
-      <label>ρ₁₃ <input type="range" id="r13" min="-0.95" max="0.95" step="0.01"><span></span></label>
-      <label>ρ₂₃ <input type="range" id="r23" min="-0.95" max="0.95" step="0.01"><span></span></label>
-      <h4>근사식에 쓸 분해 Σ⁻¹ = LLᵀ</h4>
-      <select id="factor">
-        <option value="sqrt">L = Σ^-1/2 (행렬 제곱근, Kammer)</option>
-        <option value="chol">L = 촐레스키 하삼각</option>
-        <option value="perm">L = Σ^-1/2 · P (P: 1↔2 순열)</option>
-      </select>
-      <p class="hint small">세 가지 L 모두 LLᵀ = Σ⁻¹ 을 만족합니다. 정의식은 L과 무관한데 근사식은 L에 따라 값이 바뀐다는 점이 핵심!</p>
-    </div>
-    <div class="card grow">
-      <div class="row">
-        <div><h4>센서 벡터 sᵢ (S의 행)</h4><svg id="vecplot" width="300" height="300"></svg></div>
-        <div class="grow"><h4>EfI 비교</h4><div id="toyResult"></div><div id="toyMsg" class="msg"></div></div>
-      </div>
-      <div id="toyMats" class="mats"></div>
-    </div>
-  </div>
-</section>
-
-<section id="beam">
-  <h2>③ 연속보 케이스 스터디 (논문 4장)</h2>
-  <p class="hint">4경간 연속보(경간 8–12–12–8, 총 40), 0.5 간격 80요소 → 후보 위치 81개. 휨 FE 모델로 구한 모드 중 진동수가 1차의 10배 이하인 모드 10개로 $F=\Phi^T\Sigma^{-1}\Phi$ 를 만들고, 81개에서 10개까지 한 개씩 제거합니다. 경간 길이는 논문 그림에서 최장 경간 12, 총 길이 40으로부터 가정한 값입니다.</p>
-  <div class="row">
-    <div class="card controls">
-      <h4>오차 공분산 모델</h4>
-      <select id="covModel">
-        <option value="eq29">Eq.(29) Vincenzi–Simonini (논문 사용)</option>
-        <option value="eq28">Eq.(28) 지수 상관 Papadimitriou</option>
-        <option value="identity">Σ = I (상관 없음)</option>
-      </select>
-      <label>상관 길이 λ <input type="range" id="lambda" min="0.5" max="12" step="0.5" value="4"><span></span></label>
-      <label>경간 (쉼표) <input type="text" id="spans" value="8,12,12,8"></label>
-      <button id="rebuild">보 다시 만들기</button>
-      <label class="chk"><input type="checkbox" id="runAlt1" checked> Alt.1(정의식)도 실행 — 수 초 걸림</label>
-      <div id="status" class="status"></div>
-      <hr>
-      <label>표시할 센서 수 N <input type="range" id="nSens" min="10" max="81" step="1" value="20"><span></span></label>
-      <button id="play">▶ 제거 과정 재생</button>
-      <h4>모드 형상 보기</h4>
-      <select id="modeSel"></select>
-    </div>
-    <div class="card grow">
-      <h4>보 · 모드 형상 · 센서 배치 (N개)</h4>
-      <svg id="beamPlot" class="wide" height="330"></svg>
-      <div class="legend" id="legend"></div>
-    </div>
-  </div>
-  <div class="row">
-    <div class="card grow">
-      <h4>정보 엔트로피 −ln det F vs 센서 수 (낮을수록 좋음)</h4>
-      <svg id="entPlot" class="wide" height="300"></svg>
-    </div>
-    <div class="card" style="min-width:300px">
-      <h4>순차 제거 총 계산시간</h4>
-      <svg id="timePlot" width="300" height="200"></svg>
-      <p class="hint small">브라우저에서 실측한 값입니다. 정의식(Alt.1)은 센서마다 Σ₋ᵢ 역행렬을 따로 구해야 해서 압도적으로 느립니다.</p>
-      <h4>N개일 때 엔트로피</h4>
-      <div id="entTable"></div>
-    </div>
-  </div>
-  <div class="card">
-    <h4>현재 N개 배치(Alt.2 기준)에서 각 위치의 EfI — 4가지 계산법</h4>
-    <p class="hint small">같은 센서 집합에 대해 네 가지 방법으로 EfI를 계산한 값입니다. Alt.1과 Alt.2는 완전히 겹치고, 근사식(Alt.3, 4)은 어긋납니다. ▼ 표시가 각 방법이 다음에 제거할 센서.</p>
-    <svg id="efiPlot" class="wide" height="280"></svg>
-  </div>
-  <div class="row">
-    <div class="card">
-      <h4>오차 공분산 Σ (81×81)</h4>
-      <canvas id="sigmaCanvas" width="243" height="243"></canvas>
-      <p class="hint small">가까운 센서끼리 오차가 상관되면(밝은 대각 띠) 정보가 중복되므로, 센서가 한 곳에 몰리지 않게 됩니다.</p>
-    </div>
-    <div class="card grow">
-      <h4>이 결과에서 읽을 것</h4>
-      <ul>
-        <li><b>Alt.1 = Alt.2</b>: 제안식은 정의식과 수치적으로 동일한 센서를 같은 순서로 지웁니다 → 엔트로피 곡선이 완전히 겹침.</li>
-        <li><b>Alt.3 (Σ^-1/2)</b>: 행렬 제곱근은 Σ⁻¹의 고유벡터를 보존해서 좌표 왜곡이 작아, 결과가 비슷하지만 약간 나쁨.</li>
-        <li><b>Alt.4 (촐레스키)</b>: 하삼각 분해는 좌표를 크게 섞어서 엔트로피가 확연히 높고 배치가 비대칭/군집됨.</li>
-        <li>λ를 0.5까지 줄이거나 Σ=I로 바꾸면 상관이 사라져 네 방법이 거의 같아집니다 (대각 Σ에서는 근사식도 정확).</li>
+    <section class="ch" data-ch="5">
+      <p class="num">05</p>
+      <h2>하나씩 지워 보기</h2>
+      <p>81개에서 시작해 10개가 남을 때까지 네 방법으로 각각 순차 제거를 돌립니다. 정보 엔트로피 $-\ln\det F$ 가 낮을수록 좋은 배치입니다.</p>
+      <ul class="facts">
+        <li><b>Alt.1과 Alt.2</b>는 같은 센서를 같은 순서로 지웁니다. 제안식이 정의와 정확히 같다는 뜻입니다.</li>
+        <li><b>Alt.3</b>은 제곱근이 $\Sigma^{-1}$의 고유벡터를 보존해 좌표가 덜 섞이므로, 비슷하지만 조금 나쁩니다.</li>
+        <li><b>Alt.4</b>는 촐레스키 분해가 좌표를 크게 섞어 엔트로피가 확연히 높고 배치가 한쪽으로 쏠립니다.</li>
+        <li>계산 시간은 이 브라우저에서 잰 값입니다. 정의식은 센서마다 $\Sigma_{-i}$ 역행렬을 따로 구하므로 가장 느립니다.</li>
       </ul>
-    </div>
-  </div>
-</section>
+      <p class="aside">재생을 누르면 81개에서 10개까지 지워지는 과정이 이어집니다. 그래프를 클릭해 센서 수를 고를 수도 있습니다.</p>
+    </section>
 
-<section id="proof">
-  <h2>④ 왜 제안식이 정확한가 (부록 A 요약)</h2>
-  <div class="card">
-    <ol class="proof">
-      <li>마지막 센서 $n$을 제거한다고 하고 $\Sigma^{-1}=\begin{bmatrix}A & b\\ b^T & c\end{bmatrix}$ 로 블록 분할.</li>
-      <li>센서를 빼면 $\Sigma$에서 행·열을 지우는 것이므로, 새 역행렬은 <b>슈어 보수</b> $\bar\Sigma^{-1} = A - \dfrac{bb^T}{c}$.</li>
-      <li>임의의 분해 $\Sigma^{-1}=LL^T$, $L=\begin{bmatrix}\bar L\\ l^T\end{bmatrix}$ 를 대입해 정리하면 FIM 감소량이 랭크-1 행렬:
-        $$F - F_{-n} = S^T\frac{L l\, l^T L^T}{l^T l}S = \frac{g g^T}{(\Sigma^{-1})_{nn}},\quad g = S^T(\Sigma^{-1})_{:,n}$$</li>
-      <li>$\det(I-AB)=\det(I-BA)$ 로
-        $$e_n = 1-\det\!\Big(I - F^{-1}\tfrac{gg^T}{(\Sigma^{-1})_{nn}}\Big) = \frac{g^T F^{-1} g}{(\Sigma^{-1})_{nn}} = \frac{(\Sigma^{-1}SF^{-1}S^T\Sigma^{-1})_{nn}}{(\Sigma^{-1})_{nn}}$$</li>
-      <li>$L$이 완전히 사라졌으므로 분해 방식과 무관 → 모든 $i$에 대해 한 번에: $\;e=\mathrm{diag}(\Sigma^{-1}SF^{-1}S^T\Sigma^{-1})\oslash\mathrm{diag}(\Sigma^{-1})$.</li>
-    </ol>
-    <p><b>직관:</b> 기존 근사식의 $L^TS$ 는 센서 좌표를 $L$의 열공간으로 <i>회전/혼합</i>시켜서, $e_{eq}$의 $i$번째 원소가 더 이상 $i$번 센서를 뜻하지 않습니다(좌표 변환 효과). 제안식은 양쪽에 $L$을 한 번 더 곱해 $LL^T=\Sigma^{-1}$ 로 원래 센서 좌표를 되찾고, $\mathrm{diag}(\Sigma^{-1})$ 로 나눠 정규화합니다. 상관이 없으면 ($\Sigma$ 대각) $e_i = s_i^TF^{-1}s_i/\sigma_i^2$ 로 기본 EfI에 그대로 일치합니다.</p>
-  </div>
-</section>
-</main>
-<footer>
-  모든 계산은 브라우저에서 직접 수행됩니다 (자체 구현 선형대수, 외부 라이브러리 없음 · 수식 표시는 KaTeX). 교육용 재현이며 원 논문의 수치와 세부 조건이 다를 수 있습니다.
-</footer>
+    <section class="ch" data-ch="6">
+      <p class="num">06</p>
+      <h2>제안식이 정확한 이유</h2>
+      <ol class="proof">
+        <li>마지막 센서 $n$을 뺀다고 하고 $\Sigma^{-1}=\begin{bmatrix}A&b\\b^T&c\end{bmatrix}$ 로 나눕니다.</li>
+        <li>센서를 빼면 $\Sigma$에서 행과 열이 지워지므로 새 역행렬은 슈어 보수 $A-bb^T/c$ 입니다.</li>
+        <li>임의의 분해 $\Sigma^{-1}=LL^T$ 를 넣어 정리하면 정보 감소량은 랭크 1 행렬입니다.
+          $$F-F_{-n}=\frac{gg^T}{(\Sigma^{-1})_{nn}},\quad g=S^T(\Sigma^{-1})_{:,n}$$</li>
+        <li>$\det(I-AB)=\det(I-BA)$ 를 쓰면
+          $$e_n=\frac{g^TF^{-1}g}{(\Sigma^{-1})_{nn}}=\frac{(\Sigma^{-1}SF^{-1}S^T\Sigma^{-1})_{nn}}{(\Sigma^{-1})_{nn}}$$</li>
+        <li>$L$이 식에서 사라졌으므로 분해 방식과 무관하고, 역행렬 한 번으로 모든 센서의 EfI를 동시에 얻습니다. $\Sigma$가 대각이면 $e_i=s_i^TF^{-1}s_i/\sigma_i^2$ 로 기본 EfI와 같아집니다.</li>
+      </ol>
+    </section>
+    <footer class="credit">계산은 모두 이 브라우저 안에서 직접 합니다. 교육용 재현이라 원 논문의 수치와 세부 조건이 조금 다를 수 있습니다.</footer>
+  </article>
+
+  <aside class="stage" aria-label="시뮬레이션">
+    <div class="stagebar">
+      <div class="crumbs" id="crumbs"></div>
+      <div class="nctl">
+        <label class="slider tight"><span>센서</span><input type="range" id="nSens" min="10" max="81" step="1" value="20"><output id="nOut">20</output></label>
+        <button class="btn" id="play" aria-label="제거 과정 재생">
+          <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path id="playIcon" d="M5 3.5v9l7-4.5z"/></svg>
+          <span id="playLabel">재생</span>
+        </button>
+      </div>
+    </div>
+    <div class="figure">
+      <p class="figtitle" id="figTitle"></p>
+      <svg id="beam" class="beam" role="img" aria-label="연속보와 센서 배치"></svg>
+    </div>
+    <div class="panel" id="panel"></div>
+    <p class="meta" id="meta"></p>
+  </aside>
+</div>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

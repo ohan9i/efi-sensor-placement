@@ -40,10 +40,10 @@ function quadDiag(G, Fi) {
 }
 
 export const METHODS = {
-  alt1: { name: 'Alt.1 원래 정의 (정확, 느림)', short: 'Alt.1 정의식', color: '#1f6feb', f: efiDefinition },
-  alt2: { name: 'Alt.2 제안식 Eq.(26) (정확, 빠름)', short: 'Alt.2 제안식', color: '#2da44e', f: efiProposed },
-  alt3: { name: 'Alt.3 근사 L=Σ^-1/2', short: 'Alt.3 제곱근 근사', color: '#d4a72c', f: (S, Sg) => efiFactor(S, Sg, factorSqrt(Sg)) },
-  alt4: { name: 'Alt.4 근사 L=촐레스키', short: 'Alt.4 촐레스키 근사', color: '#cf222e', f: (S, Sg) => efiFactor(S, Sg, factorChol(Sg)) },
+  alt1: { name: '원래 정의', tag: 'Alt.1', note: '센서마다 역행렬, 정확', color: '#7d93cf', f: efiDefinition },
+  alt2: { name: '제안식 Eq.(26)', tag: 'Alt.2', note: '역행렬 한 번, 정확', color: '#2747a8', f: efiProposed },
+  alt3: { name: '근사 L = Σ^-1/2', tag: 'Alt.3', note: '행렬 제곱근 분해', color: '#9a9286', f: (S, Sg) => efiFactor(S, Sg, factorSqrt(Sg)) },
+  alt4: { name: '근사 L = 촐레스키', tag: 'Alt.4', note: '하삼각 분해', color: '#a0782c', f: (S, Sg) => efiFactor(S, Sg, factorChol(Sg)) },
 };
 
 // 동점은 낮은 인덱스 우선 (대칭 구조에서 방법 간 비교를 공정하게)
